@@ -49,6 +49,7 @@ class NodeKind(StrEnum):
     EVIDENCE = "evidence"
     ARTIFACT = "artifact"
     CHECKPOINT = "checkpoint"
+    HANDOFF = "handoff"
     FAILURE_SIGNAL = "failure_signal"
     DIAGNOSIS = "diagnosis"
     REPLAY_RUN = "replay_run"
