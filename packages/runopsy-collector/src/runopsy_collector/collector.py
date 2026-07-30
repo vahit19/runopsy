@@ -8,12 +8,14 @@ row rather than a step of history — and ``rebuild`` puts the index back.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Self
 
 from runopsy_collector.journal import EventJournal, serialize
 from runopsy_collector.paths import StorePaths
+from runopsy_collector.retention import PrunePlan, PruneResult, apply_prune, plan_prune
 from runopsy_collector.store import EventStore, RunSummary
 from runopsy_collector.vault import PayloadVault
 from runopsy_core import IntegrityReport, check_integrity
@@ -124,6 +126,18 @@ class Collector:
         ``event_id`` and would therefore hide the very corruption this reports.
         """
         return check_integrity(run_id, self.journal(run_id).read())
+
+    def plan_prune(self, retain_days: int, *, now: datetime | None = None) -> PrunePlan:
+        """Work out which runs are past the retention window. Removes nothing."""
+        return plan_prune(self.store, retain_days, now=now)
+
+    def prune(self, plan: PrunePlan) -> PruneResult:
+        """Carry out a plan produced by :meth:`plan_prune`.
+
+        Takes the plan rather than a day count so that what a user was shown and what
+        gets deleted are provably the same set.
+        """
+        return apply_prune(self.paths, self.store, plan)
 
     def rebuild(self) -> int:
         """Rebuild the index from every journal on disk, returning events indexed.

@@ -52,6 +52,23 @@ def _row(event: Event, payload: bytes) -> tuple[Any, ...]:
     )
 
 
+def _digests_of(event: Event) -> set[str]:
+    """Payload digests an event refers to.
+
+    Walks the kind-specific payload rather than naming fields, so a schema addition that
+    introduces another hash cannot silently escape retention accounting.
+    """
+    found: set[str] = set()
+    for value in event.model_dump(mode="json").values():
+        if isinstance(value, dict):
+            found.update(
+                item
+                for item in value.values()
+                if isinstance(item, str) and item.startswith("sha256:")
+            )
+    return found
+
+
 def _to_storage(moment: datetime) -> datetime:
     """Normalize to naive UTC for the index.
 
@@ -361,6 +378,42 @@ class EventStore:
     def query(self, sql: str, parameters: list[Any] | None = None) -> list[tuple[Any, ...]]:
         """Escape hatch for ad-hoc SQL against the index."""
         return self._connection.execute(sql, parameters or []).fetchall()
+
+    def payload_digests(
+        self, *, only_runs: set[str] | None = None, exclude_runs: set[str] | None = None
+    ) -> set[str]:
+        """Every payload digest referenced by the selected runs.
+
+        Read out of the stored event JSON rather than kept in a side table, because the
+        journal is authoritative and a second copy of this mapping could drift from it.
+        """
+        rows = self._connection.execute(
+            "SELECT run_id, payload FROM events WHERE payload LIKE '%sha256:%'"
+        ).fetchall()
+
+        digests: set[str] = set()
+        for run_id, payload in rows:
+            if only_runs is not None and run_id not in only_runs:
+                continue
+            if exclude_runs is not None and run_id in exclude_runs:
+                continue
+            try:
+                event = _events.validate_python(orjson.loads(payload))
+            except (orjson.JSONDecodeError, ValueError):
+                continue
+            digests.update(_digests_of(event))
+        return digests
+
+    def delete_run(self, run_id: str) -> int:
+        """Remove one run from the index, returning how many events went with it."""
+        row = self._connection.execute(
+            "SELECT COUNT(*) FROM events WHERE run_id = ?", [run_id]
+        ).fetchone()
+        count = int(row[0]) if row else 0
+        self._connection.execute("DELETE FROM events WHERE run_id = ?", [run_id])
+        self._connection.execute("DELETE FROM runs WHERE run_id = ?", [run_id])
+        self._seen_runs.discard(run_id)
+        return count
 
     def reset(self) -> None:
         """Drop all indexed rows, leaving the journals untouched."""

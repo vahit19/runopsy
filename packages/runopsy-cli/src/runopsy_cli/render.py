@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.text import Text
 
 from runopsy_cli.language import confidence_phrase, gloss, heading, next_step_hint, style
-from runopsy_collector import RunSummary
+from runopsy_collector import PrunePlan, RunSummary
 from runopsy_core.schema import DiagnosisBundle, DiagnosisCandidate, TraceGraph
 from runopsy_replay import ReplayPlan, ReplayVerdict, StepAction
 
@@ -341,3 +341,42 @@ def evidence(bundle: DiagnosisBundle, graph: TraceGraph, node_id: str) -> Render
             body.append(f"  {_describe(graph, affected)}\n", style="dim")
 
     return body
+
+
+def prune_plan(plan: PrunePlan, retain_days: int) -> RenderableType:
+    """What retention would remove, stated before anything is deleted."""
+    parts: list[RenderableType] = []
+
+    header = Text()
+    header.append(f"Retention: keep runs from the last {retain_days} day(s)\n", style="bold")
+    header.append(f"cutoff {plan.older_than:%Y-%m-%d %H:%M} UTC", style="dim")
+    parts.append(header)
+
+    if plan.is_empty:
+        parts.append(Text("\nNothing has expired.", style="green"))
+    else:
+        table = Table(box=None, pad_edge=False, header_style="bold")
+        table.add_column("run")
+        table.add_column("started")
+        table.add_column("events", justify="right")
+        table.add_column("task", overflow="ellipsis", max_width=34)
+        for run in plan.expiring:
+            started = f"{run.started_at:%Y-%m-%d}" if run.started_at else "unknown"
+            table.add_row(run.run_id, started, str(run.event_count), run.task or "-")
+        parts.append(Text(""))
+        parts.append(table)
+        parts.append(Text(f"\nWould remove {plan.describe()}.", style="yellow"))
+
+    if plan.kept:
+        parts.append(Text(f"Keeping {len(plan.kept)} run(s) inside the window.", style="dim"))
+    if plan.undated:
+        # Reported rather than silently skipped: a user wondering why a run survived
+        # deserves the reason, and the reason is that we refuse to guess its age.
+        parts.append(
+            Text(
+                f"{len(plan.undated)} run(s) have no recorded start and are never "
+                "expired; an unknown age is not an old age.",
+                style="dim",
+            )
+        )
+    return Group(*parts)

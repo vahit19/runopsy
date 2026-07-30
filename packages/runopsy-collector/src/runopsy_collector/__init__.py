@@ -3,6 +3,7 @@
 from runopsy_collector.collector import Collector
 from runopsy_collector.journal import EventJournal, JournalCorruptionError, serialize
 from runopsy_collector.paths import StorePaths
+from runopsy_collector.retention import PrunePlan, PruneResult, apply_prune, plan_prune
 from runopsy_collector.store import EventStore, RunSummary
 from runopsy_collector.vault import PayloadEntry, PayloadLookup, PayloadVault
 
@@ -16,8 +17,12 @@ __all__ = [
     "PayloadEntry",
     "PayloadLookup",
     "PayloadVault",
+    "PrunePlan",
+    "PruneResult",
     "RunSummary",
     "StorePaths",
     "__version__",
+    "apply_prune",
+    "plan_prune",
     "serialize",
 ]

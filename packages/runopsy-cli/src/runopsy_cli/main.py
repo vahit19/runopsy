@@ -577,6 +577,62 @@ def ui(
 
 
 @app.command()
+def prune(
+    store: StoreOption = None,
+    retain_days: Annotated[
+        int | None,
+        typer.Option("--retain-days", help="Keep runs newer than this. Overrides the config."),
+    ] = None,
+    apply: Annotated[
+        bool, typer.Option("--apply", help="Actually delete. Without it, only reports.")
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", help="Skip the confirmation prompt.")] = False,
+) -> None:
+    """Delete recorded runs older than the retention window.
+
+    Nothing expires on its own. A trace is a record of what your repository looked like
+    while you worked, so removing one is a decision you make rather than a side effect of
+    running a diagnosis — and without ``--apply`` this only tells you what would go.
+
+    Runs with no recorded start are never expired. An unknown age is not an old age, and
+    deleting something because its timestamp was missing would turn a recording bug into
+    data loss.
+    """
+    days = retain_days if retain_days is not None else _config().retain_days
+    if days <= 0:
+        console.print(
+            "Retention is off, so nothing expires. Set [privacy] retain_days in "
+            "runopsy.toml, or pass --retain-days.",
+            style="dim",
+        )
+        return
+
+    with Collector.open(store) as collector:
+        plan = collector.plan_prune(days)
+        console.print(render.prune_plan(plan, days))
+
+        if plan.is_empty or not apply:
+            if not plan.is_empty:
+                console.print("\nRe-run with --apply to delete.", style="dim")
+            return
+
+        if not yes and not typer.confirm(f"Delete {len(plan.expiring)} run(s) permanently?"):
+            raise typer.Exit(code=1)
+
+        result = collector.prune(plan)
+
+    console.print(
+        f"Removed {len(result.removed_runs)} run(s), {result.removed_events} events"
+        + (
+            f", {result.vault_entries_removed} vault entries"
+            if result.vault_entries_removed
+            else ""
+        )
+        + "."
+    )
+
+
+@app.command()
 def doctor(store: StoreOption = None) -> None:
     """Report what is configured, without revealing any secret.
 

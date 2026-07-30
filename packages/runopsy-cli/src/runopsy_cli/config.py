@@ -40,7 +40,7 @@ _KNOWN: dict[str, set[str]] = {
     },
     "semantic": {"model", "max_calls", "cost_budget_usd"},
     "replay": {"step_timeout_seconds", "sandbox_ignore"},
-    "privacy": {"vault"},
+    "privacy": {"vault", "retain_days"},
 }
 
 
@@ -56,6 +56,13 @@ class RunopsyConfig:
     semantic_model: str = DEFAULT_MODEL
     semantic_max_calls: int = MAX_DIAGNOSTIC_CALLS
     semantic_cost_budget_usd: float = MAX_COST_USD
+
+    retain_days: int = 0
+    """Days of history to keep when ``runopsy prune`` runs. Zero means keep everything.
+
+    Defaults to off. Retention that deletes by default would remove somebody's evidence
+    the first time they upgraded, which is not a decision a default should make.
+    """
 
     vault_enabled: bool = True
     """Whether payload text is kept locally for replay.
@@ -129,6 +136,7 @@ def load_config(path: Path | None = None) -> RunopsyConfig:
         semantic_model=str(semantic.get("model", DEFAULT_MODEL)),
         semantic_max_calls=int(semantic.get("max_calls", MAX_DIAGNOSTIC_CALLS)),
         semantic_cost_budget_usd=float(semantic.get("cost_budget_usd", MAX_COST_USD)),
+        retain_days=int(privacy.get("retain_days", 0)),
         vault_enabled=bool(privacy.get("vault", True)),
         warnings=tuple(warnings),
         source=resolved,
@@ -169,4 +177,7 @@ cost_budget_usd = 0.10
 # Keep command text locally so replays can re-run it. The trace itself always
 # stores hashes only; turning this off also disables replay execution.
 vault = true
+# Days of history "runopsy prune" keeps. 0 means keep everything; nothing is
+# ever deleted without running that command explicitly.
+retain_days = 0
 """
