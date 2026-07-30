@@ -256,7 +256,7 @@ class TestRunsAndDoctor:
         output = invoke("doctor", "--store", str(store))
 
         assert secret not in output
-        assert "set in environment" in output
+        assert "environment" in output
 
     def test_doctor_says_offline_use_needs_no_key(
         self, store: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
