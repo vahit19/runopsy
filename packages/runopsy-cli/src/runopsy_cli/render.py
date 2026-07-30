@@ -15,6 +15,7 @@ from rich.text import Text
 from runopsy_cli.language import confidence_phrase, gloss, heading, next_step_hint, style
 from runopsy_collector import RunSummary
 from runopsy_core.schema import DiagnosisBundle, DiagnosisCandidate, TraceGraph
+from runopsy_replay import ReplayPlan, StepAction
 
 MAX_LISTED_CANDIDATES = 5
 DIGEST_PREVIEW = 14
@@ -164,6 +165,66 @@ def diagnosis(
     if hint:
         parts.append(Panel(hint, border_style="dim", padding=(0, 1)))
 
+    return Group(*parts)
+
+
+_ACTION_STYLE = {
+    StepAction.REPLAY: ("replay ", "green"),
+    StepAction.SANDBOX: ("sandbox", "cyan"),
+    StepAction.APPROVE: ("approve", "yellow"),
+    StepAction.BLOCK: ("blocked", "red"),
+}
+
+
+def replay_plan(plan: ReplayPlan) -> RenderableType:
+    """The ``runopsy replay`` view: a proposal, with its own limits stated."""
+    parts: list[RenderableType] = []
+
+    header = Text()
+    header.append(f"Replay plan for {plan.parent_run_id}", style="bold")
+    header.append(f"\nfrom step {plan.from_sequence} · {plan.level.value}", style="dim")
+    if plan.checkpoint_sequence is not None:
+        header.append(f" · checkpoint at step {plan.checkpoint_sequence}", style="dim")
+    else:
+        header.append(" · no checkpoint available", style="dim")
+    if plan.intervention.changed_fields():
+        changed = ", ".join(plan.intervention.changed_fields())
+        header.append(f"\nchanging: {changed}", style="dim")
+    parts.append(header)
+
+    actionable = [step for step in plan.steps if step.action is not StepAction.SKIP]
+    if actionable:
+        table = Table(box=None, pad_edge=False, header_style="bold")
+        table.add_column("step", justify="right")
+        table.add_column("action")
+        table.add_column("what")
+        table.add_column("why", overflow="fold")
+        for step in actionable:
+            label, colour = _ACTION_STYLE[step.action]
+            table.add_row(str(step.sequence), Text(label, style=colour), step.label, step.reason)
+        parts.append(Text(""))
+        parts.append(table)
+
+    summary = Text("\n")
+    summary.append(f"{len(plan.replayable)} step(s) would re-run", style="dim")
+    if plan.blocked:
+        summary.append(f", {len(plan.blocked)} excluded", style="red")
+    if plan.needs_approval:
+        summary.append(f", {len(plan.needs_approval)} need approval", style="yellow")
+    summary.append(".\n", style="dim")
+    parts.append(summary)
+
+    for warning in plan.warnings:
+        parts.append(Text(f"! {warning}", style="yellow"))
+
+    parts.append(
+        Panel(
+            "This is a plan. Nothing was executed, no file was touched, and no tool was "
+            "called again.",
+            border_style="dim",
+            padding=(0, 1),
+        )
+    )
     return Group(*parts)
 
 

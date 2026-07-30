@@ -1,26 +1,19 @@
 [project]
-name = "runopsy-cli"
+name = "runopsy-replay"
 version = "0.1.0"
-description = "The Runopsy command line: diagnose agent runs and inspect the evidence"
+description = "Checkpoint and fork replay planning for Runopsy, with side-effect gating"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 authors = [{ name = "Vahit Feryad", email = "vahit.feryat@gmail.com" }]
 dependencies = [
     "runopsy-core",
-    "runopsy-collector",
-    "runopsy-bench",
-    "runopsy-replay",
-    "typer>=0.12",
-    "rich>=13.7",
+    "pydantic>=2.8",
 ]
-
-[project.scripts]
-runopsy = "runopsy_cli.main:app"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/runopsy_cli"]
+packages = ["src/runopsy_replay"]

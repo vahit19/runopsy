@@ -12,6 +12,7 @@ members = [
     "runopsy-cli",
     "runopsy-collector",
     "runopsy-core",
+    "runopsy-replay",
     "runopsy-workspace",
 ]
 
@@ -646,6 +647,7 @@ dependencies = [
     { name = "runopsy-bench" },
     { name = "runopsy-collector" },
     { name = "runopsy-core" },
+    { name = "runopsy-replay" },
     { name = "typer" },
 ]
 
@@ -655,6 +657,7 @@ requires-dist = [
     { name = "runopsy-bench", editable = "packages/runopsy-bench" },
     { name = "runopsy-collector", editable = "packages/runopsy-collector" },
     { name = "runopsy-core", editable = "packages/runopsy-core" },
+    { name = "runopsy-replay", editable = "packages/runopsy-replay" },
     { name = "typer", specifier = ">=0.12" },
 ]
 
@@ -687,6 +690,21 @@ dependencies = [
 requires-dist = [{ name = "pydantic", specifier = ">=2.8" }]
 
 [[package]]
+name = "runopsy-replay"
+version = "0.1.0"
+source = { editable = "packages/runopsy-replay" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "runopsy-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.8" },
+    { name = "runopsy-core", editable = "packages/runopsy-core" },
+]
+
+[[package]]
 name = "runopsy-workspace"
 version = "0.0.0"
 source = { virtual = "." }
@@ -695,6 +713,7 @@ dependencies = [
     { name = "runopsy-cli" },
     { name = "runopsy-collector" },
     { name = "runopsy-core" },
+    { name = "runopsy-replay" },
 ]
 
 [package.dev-dependencies]
@@ -713,6 +732,7 @@ requires-dist = [
     { name = "runopsy-cli", editable = "packages/runopsy-cli" },
     { name = "runopsy-collector", editable = "packages/runopsy-collector" },
     { name = "runopsy-core", editable = "packages/runopsy-core" },
+    { name = "runopsy-replay", editable = "packages/runopsy-replay" },
 ]
 
 [package.metadata.requires-dev]

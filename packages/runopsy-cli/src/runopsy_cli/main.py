@@ -17,6 +17,7 @@ from runopsy_collector import Collector
 from runopsy_core import AnalysisContext
 from runopsy_core import diagnose as run_diagnosis
 from runopsy_core.detectors import default_registry
+from runopsy_replay import Intervention, build_plan
 
 app = typer.Typer(
     name="runopsy",
@@ -126,6 +127,57 @@ def evidence(
         raise typer.Exit(code=2)
 
     console.print(render.evidence(bundle, context.graph, node.node_id))
+
+
+@app.command()
+def replay(
+    run: RunArgument = LATEST,
+    from_step: Annotated[
+        int | None, typer.Option("--from-step", help="Step to replay from.")
+    ] = None,
+    store: StoreOption = None,
+    model: Annotated[
+        str | None, typer.Option("--model", help="Model to use instead of the original.")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run/--no-dry-run", help="Kept for symmetry; always a plan.")
+    ] = True,
+) -> None:
+    """Plan a controlled re-run from a chosen step.
+
+    This produces a proposal and stops. Nothing is executed, no file is touched, and no
+    tool is called again. Execution belongs to a runtime adapter and is deliberately a
+    separate step, because a replay is the only thing here that can change the world and
+    that decision belongs to a person reading a written plan.
+    """
+    if from_step is None:
+        errors.print(
+            "Pass --from-step N. 'runopsy diagnose' suggests one for its top candidate.",
+            style="red",
+        )
+        raise typer.Exit(code=2)
+
+    with Collector.open(store) as collector:
+        run_id = _resolve_run(collector, run)
+        events = collector.events(run_id)
+        if not events:
+            errors.print(f"No events recorded for run {run_id}.", style="red")
+            raise typer.Exit(code=2)
+        context = AnalysisContext.from_events(run_id, events)
+
+    if not any(node.sequence == from_step for node in context.graph.nodes):
+        errors.print(f"Run {run_id} has no step {from_step}.", style="red")
+        raise typer.Exit(code=2)
+
+    plan = build_plan(context, from_step, intervention=Intervention(model=model))
+    console.print(render.replay_plan(plan))
+
+    if not dry_run:
+        console.print(
+            "\nThis release plans replays but does not run them. Execution arrives with "
+            "the runtime adapter.",
+            style="yellow",
+        )
 
 
 @app.command()
