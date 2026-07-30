@@ -250,6 +250,19 @@ class EventStore:
             for row in rows
         )
 
+    def next_sequence(self, run_id: str) -> int:
+        """The sequence number a new event for this run should take.
+
+        Read from the store rather than held in memory because a hook-based adapter is
+        a fresh process on every event: there is nothing to keep a counter in. Two
+        events racing here would collide, which the integrity check reports as a
+        duplicate rather than hiding — the visible failure being the point.
+        """
+        row = self._connection.execute(
+            "SELECT MAX(sequence) FROM events WHERE run_id = ?", [run_id]
+        ).fetchone()
+        return 0 if row is None or row[0] is None else int(row[0]) + 1
+
     def latest_run_id(self) -> str | None:
         """The run ``runopsy diagnose latest`` refers to."""
         runs = self.runs()

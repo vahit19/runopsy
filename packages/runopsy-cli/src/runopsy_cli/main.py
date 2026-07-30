@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Final
@@ -11,7 +13,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from runopsy_adapter import record_steps
+from runopsy_adapter import hermes, record_steps
 from runopsy_bench import compare_strategies, comparison_markdown, run_benchmark
 from runopsy_cli import render
 from runopsy_cli.report import render_report
@@ -51,6 +53,64 @@ def _resolve_run(collector: Collector, run_id: str) -> str:
         errors.print("No runs recorded yet.", style="red")
         raise typer.Exit(code=2)
     return resolved
+
+
+@app.command(name="hook")
+def hook_command(
+    event: Annotated[str, typer.Argument(help="Hermes hook event name, e.g. post_tool_call.")],
+    store: StoreOption = None,
+) -> None:
+    """Record one Hermes hook payload read from stdin. Called by Hermes, not by hand.
+
+    This runs on every tool call in an agent session, so it holds to one rule above all
+    others: it must never break the run it is observing. Any failure — malformed
+    payload, unwritable store, unknown event — is swallowed, an empty decision is
+    printed, and the exit status stays zero. A diagnostic tool that takes down the agent
+    it was watching is worse than no tool at all.
+    """
+    decision = "{}"
+    try:
+        raw = sys.stdin.read()
+        payload = json.loads(raw) if raw.strip() else {}
+        payload.setdefault("hook_event_name", event)
+
+        run = hermes.run_id_for(payload)
+        with Collector.open(store) as collector:
+            mapped = hermes.map_payload(payload, sequence=collector.store.next_sequence(run))
+            if mapped is not None:
+                collector.record(mapped)
+    except Exception:
+        pass
+
+    typer.echo(decision)
+
+
+@app.command()
+def adapter(
+    runtime: Annotated[str, typer.Argument(help="Runtime to configure. Only 'hermes' today.")],
+    store: StoreOption = None,
+) -> None:
+    """Show how to connect a runtime to Runopsy.
+
+    The configuration is printed for the user to paste rather than written into their
+    file. Editing another tool's config behind its owner's back is how integrations
+    become impossible to debug, and that file may hold settings we know nothing about.
+    """
+    if runtime != "hermes":
+        errors.print(f"No adapter for {runtime!r}. Supported: hermes.", style="red")
+        raise typer.Exit(code=2)
+
+    target = Path(store).resolve() if store else None
+    command = "runopsy hook" + (f" --store {target}" if target else "")
+
+    console.print("Add this to your Hermes cli-config.yaml:\n", style="bold")
+    console.print(hermes.hooks_config_block(command))
+    console.print(
+        "Then run Hermes once and approve the hooks when prompted, or start it with\n"
+        "--accept-hooks. Every hook above only observes; none can block a tool call.\n"
+        "Afterwards: runopsy runs",
+        style="dim",
+    )
 
 
 @app.command()

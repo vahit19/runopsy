@@ -1,5 +1,6 @@
 """Runtime adapter toolkit: record well-formed traces from any runtime."""
 
+from runopsy_adapter import hermes
 from runopsy_adapter.contract import (
     ContractViolationError,
     assert_adapter_contract,
@@ -24,6 +25,7 @@ __all__ = [
     "assert_adapter_contract",
     "contains_secret",
     "describe_contract",
+    "hermes",
     "record_steps",
     "scan",
     "warn_about_state_keys",
