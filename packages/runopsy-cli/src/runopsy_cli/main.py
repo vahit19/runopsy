@@ -12,6 +12,7 @@ from rich.table import Table
 
 from runopsy_bench import run_benchmark
 from runopsy_cli import render
+from runopsy_cli.report import render_report
 from runopsy_collector import Collector
 from runopsy_core import AnalysisContext
 from runopsy_core import diagnose as run_diagnosis
@@ -125,6 +126,52 @@ def evidence(
         raise typer.Exit(code=2)
 
     console.print(render.evidence(bundle, context.graph, node.node_id))
+
+
+@app.command()
+def export(
+    run: RunArgument = LATEST,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Where to write. Defaults to <run>.html.")
+    ] = None,
+    store: StoreOption = None,
+    include_sensitive: Annotated[
+        bool,
+        typer.Option(
+            "--include-sensitive",
+            help="Keep values from steps flagged as containing secrets.",
+        ),
+    ] = False,
+) -> None:
+    """Write a self-contained HTML report for a run.
+
+    Redaction is on by default rather than opt-in. Export is the sharing path, and a
+    default that leaks is a default that eventually leaks in public; asking for the
+    unsafe behaviour explicitly costs one flag and prevents the mistake that cannot be
+    undone once a file has been sent.
+    """
+    with Collector.open(store) as collector:
+        run_id = _resolve_run(collector, run)
+        events = collector.events(run_id)
+        if not events:
+            errors.print(f"No events recorded for run {run_id}.", style="red")
+            raise typer.Exit(code=2)
+
+        context = AnalysisContext.from_events(run_id, events)
+        bundle = run_diagnosis(context)
+        summary = collector.store.run(run_id)
+
+    document = render_report(bundle, context.graph, summary, redact=not include_sensitive)
+    destination = output or Path(f"{run_id}.html")
+    destination.write_text(document, encoding="utf-8")
+
+    console.print(f"Wrote {destination} ({len(document.encode('utf-8')) // 1024} KB).")
+    if include_sensitive:
+        console.print(
+            "Redaction was disabled: this file may contain values from steps flagged "
+            "as holding secrets.",
+            style="yellow",
+        )
 
 
 @app.command()

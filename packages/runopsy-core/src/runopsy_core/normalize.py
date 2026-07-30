@@ -113,6 +113,13 @@ def _attributes(event: Event, *, only_explicit: bool = False) -> dict[str, objec
             attributes: dict[str, object] = dict(payload[field])
             if event.state_delta:
                 attributes["state_delta"] = payload["state_delta"]
+            # The redaction flags must travel with the node. A consumer that only sees
+            # the graph — an export, a UI — otherwise has no way to know a step was
+            # flagged, and would publish it as though the scanner had never run.
+            if event.security.contains_secret:
+                attributes["contains_secret"] = True
+            if event.security.redacted:
+                attributes["redacted"] = True
             return attributes
     return {}
 
