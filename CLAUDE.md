@@ -32,6 +32,30 @@ Credentials live in `.env` at the repository root, which `.gitignore` excludes a
 
 Runopsy must stay fully usable with **none** of these set: local models via Ollama/llama.cpp, and rules-only mode, require no key at all. Never make a missing key a hard failure at startup — degrade to the offline path and say so.
 
+### How end users supply credentials
+
+Runopsy is BYOK: every user brings their own provider key. No key is ever bundled, defaulted, proxied through a Runopsy-operated service, or shared between users — that is what makes "your code and traces stay on your machine" true rather than a slogan, and it keeps the project free of per-user inference cost.
+
+`runopsy setup` onboards a key interactively and stores it in the **OS keyring** (Windows Credential Manager, macOS Keychain, Secret Service on Linux), not in a file. Resolution order, first match wins:
+
+1. explicit `--api-key` flag (scripted and CI use)
+2. process environment (`OPENROUTER_API_KEY`)
+3. OS keyring entry written by `runopsy setup` — the normal path for an end user
+4. `.env` in the working directory — developer convenience only, warn when used
+
+Rules that hold everywhere: a key is never written into a trace, log, diagnosis bundle, export or crash report; the secret scanner runs over any payload before it leaves the machine; `runopsy doctor` reports only whether a credential resolved and from which source, never its value.
+
+## Open-core boundary
+
+This determines where code goes, not just how it is sold. Everything under `packages/` is Apache-2.0 and must work standalone, offline, forever: the CLI, core engine, collector, replay, runtime adapters, the 2D/3D UI and Runopsy-Bench.
+
+A future commercial tier is a **separate server product** for teams — shared run history, cross-run trend and regression analysis, RBAC/SSO, audit export, central policy management, alerting and long retention. Two constraints follow:
+
+- Nothing in `packages/` may call a Runopsy-hosted service, or degrade when one is absent. No telemetry-by-default, no feature that quietly needs an account.
+- A commercial feature may add team-scale capability, but may never remove or cripple something the local product already does. Crippling the open core to sell the paid tier destroys the adoption channel the paid tier depends on.
+
+The defensible asset is not the visualization: it is the labeled failure corpus, the calibrated onset/propagation measurements, and the replay-verified recovery data in Runopsy-Bench. Protect the benchmark's rigor accordingly.
+
 ## What Runopsy is
 
 Runopsy ("Run + Autopsy") is a local-first, open-source coding-agent CLI with a built-in **Causal Failure Analysis (CFA)** engine. When an agent run fails, instead of dumping logs it shows the *suspected failure onset*, the evidence behind that claim, the downstream propagation chain, and a user-approved replay plan from the right checkpoint.
