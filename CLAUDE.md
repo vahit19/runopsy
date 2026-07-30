@@ -1,0 +1,175 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project status
+
+This is a **greenfield repository**. It currently contains only:
+
+- `runopsy-proje-tasarim-belgesi.pdf` — the 39-page Turkish design document (v0.2, 30 July 2026) that is the single source of truth for the product
+- `.env` (git-ignored, holds live credentials), `.env.example`, `.gitignore`, and this file
+
+There is no source code, no git repository, no build system, and no test suite yet. Everything below describes decisions already made in the design document, so scaffolding work stays consistent with it. For anything not covered here, read the PDF rather than inventing an approach.
+
+## Language
+
+**The product ships in English.** It targets a global open-source audience, so everything a user or contributor can see is written in English: CLI help and output, TUI and web UI copy, error and diagnosis messages, README and `docs/`, code comments, identifiers, schema field names, commit messages, issue templates, and release notes. No Turkish strings in shipped artifacts.
+
+The design PDF is Turkish and the repository owner writes in Turkish — that applies to conversation only, never to committed content. Translate concepts from the PDF into English terminology rather than transliterating (e.g. "aday başlangıç" → *suspected onset*, "yayılım" → *propagation*, "kanıt" → *evidence*).
+
+Keep user-facing strings out of scattered f-strings where practical, so localization stays possible later without a rewrite. Localization itself is not in MVP scope.
+
+## Secrets and environment
+
+Credentials live in `.env` at the repository root, which `.gitignore` excludes and which must never be committed, printed, or pasted into a command. The owner fills the values manually; code reads them from the environment and must never write, echo, or log a key. `.env.example` is committed and holds the variable names with empty values — keep it in sync whenever a new variable is introduced.
+
+| Variable | Needed for | When |
+|---|---|---|
+| `OPENROUTER_API_KEY` | OpenRouter BYOK provider — task model, hybrid/semantic diagnosis, replay | First real provider call |
+| `GITHUB_TOKEN` | GitHub Actions CI, release publishing, dependency/SBOM scans | CI and release setup |
+| `HF_TOKEN` | Publishing the Runopsy-Bench dataset and demo to Hugging Face | Benchmark distribution |
+| `PYPI_API_TOKEN` | Publishing the CLI to PyPI | First public release |
+
+Runopsy must stay fully usable with **none** of these set: local models via Ollama/llama.cpp, and rules-only mode, require no key at all. Never make a missing key a hard failure at startup — degrade to the offline path and say so.
+
+## What Runopsy is
+
+Runopsy ("Run + Autopsy") is a local-first, open-source coding-agent CLI with a built-in **Causal Failure Analysis (CFA)** engine. When an agent run fails, instead of dumping logs it shows the *suspected failure onset*, the evidence behind that claim, the downstream propagation chain, and a user-approved replay plan from the right checkpoint.
+
+Positioning boundaries that matter when making design calls:
+
+- It is an **independent product**, not a Hermes plugin. Hermes Agent is only the *first runtime adapter* and the first distribution surface.
+- It is **not** a general-purpose assistant. The target user runs coding/repository/terminal tasks.
+- The product value is **provable diagnosis and verifiable recovery**, not 3D visualization. The 3D view is optional; 2D is the default.
+
+## Architecture
+
+Pipeline: **capture → normalize → find candidates → measure impact → validate**
+
+```
+User (Runopsy CLI / Hermes TUI)
+  └─ Agent Runtime (Hermes v1 first; others later) ── Model Provider (local / OpenRouter)
+       └─ Runtime Adapter (hooks + policy)
+            └─ Trace Normalizer (OpenInference-compatible)
+                 └─ Local store (DuckDB + JSONL)
+                      └─ Runopsy CFA Engine (rules + graph + eval)
+                           ├─ Terminal diagnosis (runopsy diagnose)
+                           ├─ Replay engine (fork + rollback)
+                           ├─ 2D/3D UI (timeline + failure map)
+                           └─ Runopsy-Bench (measurement + regression)
+```
+
+Component responsibilities:
+
+| Component | Responsibility |
+|---|---|
+| Runtime adapter (Hermes) | Hook capture, runtime metadata, policy, snapshots, slash commands |
+| Trace Normalizer | Runtime events → OpenInference-compatible typed graph (`TraceNode` / `TraceEdge`) |
+| Local Collector | Append-only event ingest with sequence and integrity checks |
+| Detector Registry | Loop, exception, tool, state, handoff, evidence, budget detectors → `FailureSignal[]` |
+| Causal Ranker | Ranks failure-onset candidates and downstream impact → `Candidate[]` |
+| Semantic Evaluator | LLM-based claim/evidence and handoff checks **on selected spans only** |
+| Replay Orchestrator | Checkpoint, rollback, fork, alternative model/policy execution |
+| TUI / Web UI | Live status, timeline, graph, evidence, original-vs-replay comparison |
+| Runopsy-Bench | Labeled trajectories, fault injection, regression measurement |
+
+### Planned monorepo layout
+
+```
+packages/
+  runopsy-core/       # graph, schema, detectors, ranking  (framework-agnostic)
+  adapter-hermes/     # Hermes plugin + event mapping
+  runopsy-collector/  # local ingest and persistence
+  runopsy-replay/     # checkpoint/fork orchestration
+  runopsy-cli/        # Typer + Textual
+  runopsy-server/     # FastAPI
+  runopsy-ui/         # React 2D/3D
+  runopsy-inspect/    # Inspect AI benchmark adapter
+benchmarks/{synthetic,fault_injection,labeled_runs}/
+examples/{coding_failure,research_failure,multi_agent_handoff}/
+docs/  scripts/  tests/  pyproject.toml  uv.lock  LICENSE
+```
+
+`runopsy-core` must never import runtime-specific code — it accepts only the normalized trace graph.
+
+## Non-negotiable design principles
+
+These come from sections 5.1, 16 and 23 of the design document. Violating them changes what the product is.
+
+1. **Do not fork Hermes.** Integrate through its plugin/hook system and programmatic API. Missing hooks are proposed upstream first; forking is the last resort.
+2. **Local-first.** Traces, state, and artifacts stay on the user's machine by default. Nothing goes to a provider without explicit opt-in and payload minimization (hashes and excerpts, not whole files).
+3. **Deterministic-first.** L0–L2 analysis (structural, behavioral, graph impact) must run with **zero LLM tokens**, always on. Semantic analysis is optional, scoped to suspicious spans, and hard-capped by budget config.
+4. **Evidence-first, calibrated language.** Every diagnosis links back to source events, state diffs, and evaluator signals. "Definitive root cause" may only be stated when backed by replay or human verification — temporal ordering plus correlation is *not* causal proof.
+5. **Human in control.** Risky interventions and replays require explicit approval. Replays run in a fork/worktree/sandbox; external side effects (email, payment, delete, publish, remote mutation) are blocked by default. The original run is never mutated — a replay is a new `run_id` with `parent_run_id`.
+6. **Separate actor from diagnostician.** The model doing the task and the model diagnosing it are configured and budgeted separately; a model self-grading is not treated as trustworthy on its own.
+
+Default safe-mode config (section 16.1):
+
+```yaml
+privacy:  { storage: local, send_raw_trace_to_provider: false, redact_secrets: true, redact_pii: true, retain_raw_days: 7 }
+replay:   { require_confirmation: true, sandbox: worktree, external_side_effects: block }
+diagnosis:{ causal_language: calibrated, allow_definitive_root_cause_without_replay: false }
+analysis: { mode: deterministic, llm_on: suspicious, max_diagnostic_calls: 2,
+            max_diagnostic_input_tokens: 6000, max_replay_runs: 1, max_cost_usd: 0.10,
+            cache_by_trace_hash: true }
+```
+
+## Tech stack (already chosen — do not substitute without reason)
+
+**Backend/CLI:** Python 3.12 · Typer (CLI) · Textual + Rich (TUI) · Pydantic v2 (typed trace/config) · OpenTelemetry SDK + OpenInference semconv · DuckDB (local analytics store) · NetworkX (graph analysis, MVP) · FastAPI + Uvicorn (local API) · httpx · orjson · structlog · psutil (hardware discovery)
+
+**Web:** React + TypeScript · Vite · React Flow/XYFlow (2D DAG) · Three.js + React Three Fiber (optional 3D) · TanStack Query · Zustand
+
+**Quality/packaging:** pytest + pytest-asyncio · Hypothesis (property-based graph/schema tests) · coverage.py · Ruff (lint + format) · mypy · Bandit + Semgrep · uv + hatchling · pipx / uv tool (install) · Docker (optional sandbox) · GitHub Actions
+
+**Models:** Hermes Agent (required runtime for MVP) · Ollama / llama.cpp (optional local) · OpenRouter (optional BYOK) · Inspect AI (benchmark harness) · Arize Phoenix (optional)
+
+**Licensing:** Apache-2.0 for Runopsy core; preserve Hermes MIT notices; run SBOM + license scan before any release.
+
+## Domain vocabulary
+
+**Node types:** `Run`, `Agent`, `Turn`, `LLMCall`, `ToolCall`, `StateSnapshot`, `MemoryOp`, `Claim`, `Evidence`, `Artifact`, `Checkpoint`, `FailureSignal`, `Diagnosis`, `ReplayRun`
+
+**Edge types:** `PRECEDES`, `DEPENDS_ON`, `PRODUCED`, `CONSUMED`, `DERIVED_FROM`, `CONTRADICTS`, `VALIDATES`, `AFFECTS`, `FORKED_FROM`
+
+**Analysis layers:** L0 structural (sequence, schema, exit code, exception, timeout) · L1 behavioral (loop, retry storm, plan divergence, state invariants) · L2 graph impact (precedence, reachability, centrality) · L3 semantic (claim-evidence, handoff completeness — *optional, token-spending*) · L4 validation (counterfactual replay, human label)
+
+**Diagnosis statuses** (distinct, never collapsed in output): `observed failure` · `suspected onset` · `correlated cause` · `replay-supported` · `human-verified` · `unknown`
+
+**Replay levels:** R0 explain-only · R1 turn rollback · R2 session fork *(these three are MVP)* · R3 guided replay · R4 step replay · R5 automated recovery *(research)*
+
+**Failure taxonomy** (section 9): goal/input, planning, retrieval, tool selection, tool arguments, tool execution, state, memory, handoff, reasoning, validation, control flow, budget, safety, outcome.
+
+## Planned interfaces
+
+None of these exist yet — implement them to match these shapes.
+
+```bash
+runopsy setup | doctor
+runopsy adapter hermes status
+runopsy run --adapter hermes --provider openrouter -- "task"
+runopsy diagnose latest --mode deterministic|hybrid [--budget-usd 0.10]
+runopsy evidence latest --step 17
+runopsy graph latest --view causal
+runopsy replay latest --from-step 17 --model local:qwen --dry-run
+runopsy ui
+runopsy export latest --format html --redact
+```
+
+Hermes slash commands: `/runopsy status|diagnose|evidence <n>|graph|replay <n>|mode offline|budget <usd>`
+
+Local API: `POST /v1/events` · `GET /v1/runs` · `GET /v1/runs/{id}` · `GET /v1/runs/{id}/graph` · `POST /v1/runs/{id}/diagnose` · `GET /v1/diagnoses/{id}` · `POST /v1/runs/{id}/replay/plan` · `POST /v1/runs/{id}/replay` · `GET /v1/runs/{id}/stream` (SSE) · `POST /v1/export`
+
+Storage split: structured events → DuckDB · raw event stream → append-only JSONL · artifacts → content-addressed local folder (SHA-256, size limit, secret scan) · graph cache → Parquet/DuckDB · diagnoses → JSON.
+
+## MVP scope
+
+**In:** standalone Runopsy CLI running locally · Hermes runtime adapter for coding tasks · trace/state capture and deterministic detectors · candidate onset, evidence and propagation view · approved checkpoint/session-fork replay · local model, OpenRouter BYOK and rules-only modes · Runopsy-Bench with a fault-injected demo set
+
+**Out:** general-purpose chat assistant · every agent framework on day one · guaranteed exact root cause on every run · unattended repo mutation or recovery · 3D view as the default or main product · enterprise SaaS platform · access to or storage of hidden chain-of-thought
+
+**MVP acceptance criteria (section 18.1)** — in offline mode zero external model calls; at least eight deterministic detectors working end to end; diagnosis JSON carrying evidence, confidence and affected nodes per candidate; dry-run plans for rollback and fork; risky external side-effect replay blocked by default; 2D timeline and causal graph sharing the same trace node IDs; reproducible benchmark report; one-command local demo.
+
+**First sprint order (section 24):** 1) Hermes plugin skeleton + hook spike → 2) trace schema v0.1 (Pydantic + JSON Schema) → 3) DuckDB collector → 4) deterministic detector registry → 5) diagnosis bundle → 6) CLI `diagnose`/`evidence` → 7) 20 synthetic failure fixtures with ground-truth onset → 8) 2D HTML graph → 9) checkpoint/fork dry-run → 10) rule-only benchmark baseline.
+
+Priority rule: event capture and schema correctness first, then the deterministic engine, then evidence/2D UX, then replay and semantic evaluation, and 3D/cloud last.

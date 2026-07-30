@@ -1,0 +1,42 @@
+# Secrets — never commit. Real values live only in the local .env.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Runopsy local data: traces, artifacts and diagnoses stay on the user's machine
+.runopsy/
+*.duckdb
+*.duckdb.wal
+*.jsonl
+*.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Node / web UI
+node_modules/
+.vite/
+packages/runopsy-ui/dist/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
