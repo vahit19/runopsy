@@ -26,6 +26,14 @@ from runopsy_bench.metrics import (
     evaluate_case,
     run_benchmark,
 )
+from runopsy_bench.performance import (
+    PerformanceReport,
+    Timing,
+    measure,
+    run_performance_suite,
+    scaling_factor,
+    synthetic_trace,
+)
 from runopsy_bench.report import comparison_markdown
 
 __version__ = "0.1.0"
@@ -40,9 +48,11 @@ __all__ = [
     "InjectionScore",
     "LastFailure",
     "NoDiagnosis",
+    "PerformanceReport",
     "RuleOnly",
     "Strategy",
     "SyntheticCase",
+    "Timing",
     "__version__",
     "all_cases",
     "all_strategies",
@@ -52,6 +62,10 @@ __all__ = [
     "evaluate_case",
     "inject",
     "injection_campaign",
+    "measure",
     "run_benchmark",
+    "run_performance_suite",
+    "scaling_factor",
     "score_injections",
+    "synthetic_trace",
 ]

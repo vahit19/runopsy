@@ -618,6 +618,10 @@ def bench(
         bool,
         typer.Option("--inject", help="Score against faults injected into the demo run."),
     ] = False,
+    perf: Annotated[
+        bool,
+        typer.Option("--perf", help="Time ingest, graph build and diagnosis at scale."),
+    ] = False,
     write: Annotated[
         Path | None,
         typer.Option("--write", help="Write a Markdown comparison report to this path."),
@@ -628,6 +632,10 @@ def bench(
     Reproducible and offline: the suite is generated, not sampled, so the same code
     always produces the same numbers and a regression is visible immediately.
     """
+    if perf:
+        _report_performance()
+        return
+
     if inject:
         _report_injections()
         return
@@ -775,5 +783,44 @@ def _report_injections() -> None:
         console.print(
             f"\n{skipped} injected fault(s) left nothing anomalous in the trace and are "
             "excluded. Reaching those needs semantic analysis or a replay.",
+            style="dim",
+        )
+
+
+def _report_performance() -> None:
+    """Time the pipeline at the sizes the design document's quality gate names.
+
+    Wall clock on this machine, so the absolute numbers will differ on yours. The
+    durable part is the shape: every stage should stay roughly proportional to the
+    number of events.
+    """
+    from runopsy_bench.performance import STAGES, run_performance_suite
+
+    reports = run_performance_suite()
+
+    table = Table(box=None, pad_edge=False, header_style="bold")
+    table.add_column("stage")
+    for report in reports:
+        table.add_column(f"{report.events:,}", justify="right")
+    for stage in STAGES:
+        row = [stage]
+        for report in reports:
+            timing = report.stage(stage)
+            row.append(f"{timing.milliseconds:,.0f} ms" if timing else "-")
+        table.add_row(*row)
+    console.print(table)
+
+    slowest = min(
+        (
+            (report.stage(stage).per_second, stage)  # type: ignore[union-attr]
+            for report in reports
+            for stage in STAGES
+            if report.stage(stage) is not None
+        ),
+        default=None,
+    )
+    if slowest is not None:
+        console.print(
+            f"\nSlowest stage: {slowest[1]} at {slowest[0]:,.0f} events/second.",
             style="dim",
         )
