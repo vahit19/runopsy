@@ -5,7 +5,7 @@ description = "Framework-agnostic trace schema, graph, detectors and causal rank
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
-authors = [{ name = "Vahit Feryad" }]
+authors = [{ name = "Vahit Feryad", email = "vahit.feryat@gmail.com" }]
 keywords = ["agent", "observability", "root-cause-analysis", "llm", "tracing"]
 dependencies = [
     "pydantic>=2.8",

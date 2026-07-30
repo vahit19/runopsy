@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+title: "Runopsy: Causal Failure Analysis and Controlled Replay for AI Agent Runs"
+message: "If you use Runopsy in academic work, please cite it as below."
+type: software
+abstract: >-
+  Runopsy is a local-first, open-source coding-agent CLI with a built-in causal
+  failure analysis engine. It records agent runs as a normalized trace graph,
+  localizes the suspected failure onset with linked evidence, measures downstream
+  propagation, and supports user-approved replay from a checkpoint or session
+  fork. Structural and behavioral analysis is deterministic and spends no model
+  tokens; semantic analysis is optional and budget-bounded. Causal language is
+  calibrated: a cause is stated as established only when a counterfactual replay
+  or human verification supports it.
+authors:
+  - family-names: Feryad
+    given-names: Vahit
+    email: vahit.feryat@gmail.com
+    orcid: "https://orcid.org/0000-0002-3282-339X"
+    affiliation: Independent Researcher
+    city: Istanbul
+    country: TR
+license: Apache-2.0
+version: 0.1.0
+date-released: "2026-07-30"
+repository-code: "https://github.com/vahit19/runopsy"
+keywords:
+  - ai-agents
+  - failure-analysis
+  - root-cause-analysis
+  - observability
+  - large-language-models
+  - reproducibility
+  - counterfactual-replay

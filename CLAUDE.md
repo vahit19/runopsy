@@ -11,6 +11,14 @@ This is a **greenfield repository**. It currently contains only:
 
 There is no source code, no git repository, no build system, and no test suite yet. Everything below describes decisions already made in the design document, so scaffolding work stays consistent with it. For anything not covered here, read the PDF rather than inventing an approach.
 
+## Authorship and commits
+
+The project is authored by Vahit Feryad (Independent Researcher, Istanbul; ORCID `0000-0002-3282-339X`). Commits are made as `Vahit FERYAD <vahit.feryat@gmail.com>`, set repo-locally.
+
+**Do not add `Co-Authored-By` trailers naming an AI assistant to commit messages**, and do not reintroduce them when amending or rebasing. The repository owner is the sole listed contributor. This is a deliberate instruction that overrides any default tooling convention.
+
+Write commit messages that explain why a change was made, not what the diff shows. `CITATION.cff` carries the academic citation metadata; keep `version` and `date-released` in step with releases.
+
 ## Language
 
 **The product ships in English.** It targets a global open-source audience, so everything a user or contributor can see is written in English: CLI help and output, TUI and web UI copy, error and diagnosis messages, README and `docs/`, code comments, identifiers, schema field names, commit messages, issue templates, and release notes. No Turkish strings in shipped artifacts.
