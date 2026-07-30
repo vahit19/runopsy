@@ -10,6 +10,15 @@ from runopsy_bench.baselines import (
     all_strategies,
 )
 from runopsy_bench.cases import SyntheticCase, all_cases
+from runopsy_bench.injection import (
+    FaultKind,
+    InjectedFault,
+    InjectionScore,
+    applicable_kinds,
+    inject,
+    injection_campaign,
+    score_injections,
+)
 from runopsy_bench.metrics import (
     BenchmarkReport,
     CaseResult,
@@ -25,7 +34,10 @@ __all__ = [
     "DEFAULT_STRATEGY",
     "BenchmarkReport",
     "CaseResult",
+    "FaultKind",
     "FirstFailure",
+    "InjectedFault",
+    "InjectionScore",
     "LastFailure",
     "NoDiagnosis",
     "RuleOnly",
@@ -34,8 +46,12 @@ __all__ = [
     "__version__",
     "all_cases",
     "all_strategies",
+    "applicable_kinds",
     "compare_strategies",
     "comparison_markdown",
     "evaluate_case",
+    "inject",
+    "injection_campaign",
     "run_benchmark",
+    "score_injections",
 ]
