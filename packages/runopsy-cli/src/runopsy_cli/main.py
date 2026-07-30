@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,9 +31,14 @@ from runopsy_replay import (
 from runopsy_semantic import (
     API_KEY_VARIABLE,
     Budget,
+    KeyringUnavailableError,
     OpenRouterClient,
+    delete_keyring,
+    describe_source,
+    resolve,
     resolve_api_key,
     review_diagnosis,
+    write_keyring,
 )
 
 app = typer.Typer(
@@ -49,7 +53,6 @@ errors = Console(stderr=True)
 
 LATEST: Final = "latest"
 
-PROVIDER_VARIABLES: Final = ("OPENROUTER_API_KEY",)
 
 StoreOption = Annotated[
     Path | None,
@@ -108,6 +111,51 @@ def hook_command(
         print(f"runopsy: could not record {event}: {type(error).__name__}", file=sys.stderr)
 
     typer.echo(decision)
+
+
+@app.command()
+def setup(
+    remove: Annotated[
+        bool, typer.Option("--remove", help="Delete the stored key instead of setting one.")
+    ] = False,
+) -> None:
+    """Store a provider key in the OS credential store.
+
+    The key goes to Windows Credential Manager, macOS Keychain, or Secret Service — not
+    to a file. A key in a file is a key in backups, in a synced folder, and eventually in
+    a screenshot.
+
+    Nothing in Runopsy requires this. Every deterministic feature works with no key at
+    all; a key only buys ``diagnose --mode hybrid``.
+    """
+    if remove:
+        removed = delete_keyring()
+        console.print("Removed the stored key." if removed else "No stored key to remove.")
+        return
+
+    existing = resolve()
+    already_stored = existing is not None and existing.source == "OS keyring"
+    if already_stored and not typer.confirm("A key is already stored. Replace it?"):
+        raise typer.Exit(code=1)
+
+    # hide_input keeps it out of the terminal; it is never echoed, logged or stored
+    # anywhere but the credential store.
+    key = typer.prompt("OpenRouter API key", hide_input=True).strip()
+    if not key:
+        errors.print("No key entered; nothing was stored.", style="red")
+        raise typer.Exit(code=2)
+
+    try:
+        write_keyring(key)
+    except KeyringUnavailableError as error:
+        errors.print(
+            f"Could not use the OS credential store: {error}\n"
+            f"Set {API_KEY_VARIABLE} in your environment instead.",
+            style="red",
+        )
+        raise typer.Exit(code=1) from error
+
+    console.print("Stored. Verify with: runopsy doctor")
 
 
 @app.command()
@@ -510,12 +558,9 @@ def doctor(store: StoreOption = None) -> None:
     table.add_row("runs recorded", str(run_count))
     table.add_row("detectors", f"{len(default_registry())} deterministic")
 
-    for variable in PROVIDER_VARIABLES:
-        configured = bool(os.environ.get(variable))
-        table.add_row(
-            variable,
-            "set in environment" if configured else "not set (offline modes still work)",
-        )
+    # Reported by presence and source only. A key printed to a terminal is a key in
+    # scrollback, screenshots and shared logs.
+    table.add_row(API_KEY_VARIABLE, describe_source(resolve()))
 
     console.print(table)
     console.print(

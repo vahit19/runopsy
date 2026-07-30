@@ -12,7 +12,6 @@ suite people disable.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -50,11 +49,15 @@ class Transport(Protocol):
 def resolve_api_key(explicit: str | None = None) -> str | None:
     """Find a key, or report that there is none.
 
-    Returning ``None`` rather than raising is deliberate: no key means the deterministic
-    diagnosis still runs and still answers, which is the whole point of the offline-first
-    design.
+    Delegates to the credential resolver so every caller sees the same order: flag,
+    environment, OS keyring, then a developer .env. Returning ``None`` rather than
+    raising is deliberate — no key means the deterministic diagnosis still runs and
+    still answers, which is the whole point of the offline-first design.
     """
-    return explicit or os.environ.get(API_KEY_VARIABLE) or None
+    from runopsy_semantic.credentials import resolve
+
+    found = resolve(explicit)
+    return found.key if found else None
 
 
 class OpenRouterClient:

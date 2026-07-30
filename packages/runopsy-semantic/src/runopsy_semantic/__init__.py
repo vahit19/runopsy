@@ -2,6 +2,15 @@
 
 from runopsy_semantic.budget import Budget, BudgetExceededError, Ledger, estimate_tokens
 from runopsy_semantic.cache import VerdictCache
+from runopsy_semantic.credentials import (
+    KeyringUnavailableError,
+    ResolvedKey,
+    delete_keyring,
+    describe_source,
+    read_keyring,
+    resolve,
+    write_keyring,
+)
 from runopsy_semantic.evaluator import (
     MAX_SEMANTIC_CONFIDENCE,
     PROMPT_VERSION,
@@ -34,19 +43,26 @@ __all__ = [
     "Completion",
     "EvidencePacket",
     "HybridResult",
+    "KeyringUnavailableError",
     "Ledger",
     "OpenRouterClient",
     "ProviderError",
+    "ResolvedKey",
     "SemanticVerdict",
     "VerdictCache",
     "__version__",
     "build_packet",
     "cache_key",
+    "delete_keyring",
+    "describe_source",
     "estimate_tokens",
     "parse_verdict",
+    "read_keyring",
+    "resolve",
     "resolve_api_key",
     "review_diagnosis",
     "review_span",
     "to_signal",
     "window_around",
+    "write_keyring",
 ]

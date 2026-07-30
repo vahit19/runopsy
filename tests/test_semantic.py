@@ -357,9 +357,10 @@ class TestHybridDiagnosis:
 
 class TestKeyHandling:
     def test_a_missing_key_is_reported_as_absent_not_raised(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """No key means the offline diagnosis still answers, which is the whole design."""
+        monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
         assert resolve_api_key() is None

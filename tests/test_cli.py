@@ -239,7 +239,9 @@ class TestRunsAndDoctor:
         assert "detectors" in output
         assert "deterministic" in output
 
-    def test_doctor_never_prints_a_key(self, store: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_doctor_never_prints_a_key(
+        self, store: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """A key printed to a terminal is a key in scrollback, screenshots and logs.
 
         The sentinel deliberately avoids any real provider's key prefix. A realistic
@@ -247,6 +249,8 @@ class TestRunsAndDoctor:
         alert that is always false is an alert people learn to dismiss.
         """
         secret = "PLACEHOLDER-not-a-real-credential-0123456789"
+        # Run somewhere without a .env, so the source under test is the environment.
+        monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("OPENROUTER_API_KEY", secret)
 
         output = invoke("doctor", "--store", str(store))
@@ -255,8 +259,10 @@ class TestRunsAndDoctor:
         assert "set in environment" in output
 
     def test_doctor_says_offline_use_needs_no_key(
-        self, store: Path, monkeypatch: pytest.MonkeyPatch
+        self, store: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """With nothing configured anywhere, doctor must still be reassuring."""
+        monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
         output = invoke("doctor", "--store", str(store))
