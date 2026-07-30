@@ -10,6 +10,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from runopsy_bench import run_benchmark
 from runopsy_cli import render
 from runopsy_collector import Collector
 from runopsy_core import AnalysisContext
@@ -156,6 +157,54 @@ def doctor(store: StoreOption = None) -> None:
         "\nDeterministic diagnosis needs no provider key and spends no tokens.",
         style="dim",
     )
+
+
+@app.command()
+def bench(
+    verbose: Annotated[
+        bool, typer.Option("--verbose", help="List every case and what was predicted.")
+    ] = False,
+) -> None:
+    """Score the engine against labelled synthetic traces.
+
+    Reproducible and offline: the suite is generated, not sampled, so the same code
+    always produces the same numbers and a regression is visible immediately.
+    """
+    report = run_benchmark()
+
+    table = Table(box=None, pad_edge=False, show_header=False)
+    table.add_row("cases", str(len(report.results)))
+    table.add_row("scored for accuracy", str(len(report.scored)))
+    table.add_row("onset top-1 accuracy", f"{report.top1_accuracy:.1%}")
+    table.add_row("onset top-3 recall", f"{report.top3_recall:.1%}")
+    table.add_row("mean step distance", f"{report.mean_step_distance:.2f}")
+    table.add_row("false positive rate", f"{report.false_positive_rate:.1%}")
+    console.print(table)
+
+    if report.blind_spots:
+        console.print(
+            f"\n{len(report.blind_spots)} case(s) excluded: nothing in the trace is "
+            "anomalous at the onset, so structural analysis cannot reach them.",
+            style="dim",
+        )
+        for result in report.blind_spots:
+            console.print(f"  {result.case.name} — {result.case.description}", style="dim")
+
+    misses = report.failures()
+    if misses:
+        console.print("\nMissed the exact onset", style="bold")
+        for result in misses:
+            console.print(
+                f"  {result.case.name}: truth step {result.case.onset_step}, "
+                f"ranked {result.predicted_steps[:3]}",
+                style="dim",
+            )
+
+    if verbose:
+        console.print("\nAll cases", style="bold")
+        for result in report.results:
+            mark = "ok " if result.is_exact or result.case.is_healthy else "miss"
+            console.print(f"  {mark}  {result.case.name}", style="dim")
 
 
 if __name__ == "__main__":  # pragma: no cover

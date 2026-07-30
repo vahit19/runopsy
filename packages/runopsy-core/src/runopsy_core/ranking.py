@@ -28,6 +28,7 @@ from runopsy_core.schema import (
     DiagnosisStatus,
     FailureCategory,
     FailureSignal,
+    NodeKind,
     Severity,
 )
 
@@ -50,8 +51,24 @@ _SYMPTOM_CATEGORIES: Final = frozenset(
 )
 """Categories that describe something the user actually saw go wrong."""
 
-_EVIDENCE_ONLY_DETECTORS: Final = frozenset({"structural:trace_integrity"})
-"""Detectors that report on the trace itself and must never be nominated as a cause."""
+_EVIDENCE_ONLY_DETECTORS: Final = frozenset(
+    {"structural:trace_integrity", "structural:missing_run_start"}
+)
+"""Detectors that judge the recording rather than the run.
+
+"Events are missing" and "the task was never recorded" both say the evidence is
+incomplete. Neither says a step misbehaved, so neither may be nominated as a cause —
+they lower confidence in every candidate instead.
+"""
+
+_NON_STEP_KINDS: Final = frozenset({NodeKind.RUN, NodeKind.AGENT})
+"""Container nodes that cannot themselves be an onset.
+
+A run or an agent is not something that happened at a point in time; it is the thing
+inside which steps happened. Left eligible, the run node sits at sequence zero and wins
+the precedence term outright, so every diagnosis would nominate "the run" as the
+earliest suspect and say nothing useful.
+"""
 
 
 @dataclass(frozen=True)
@@ -183,9 +200,13 @@ def rank_candidates(
     earliest = min(positions.values(), default=0)
     penalty = 0.0 if context.integrity.is_intact else 0.5
 
+    kinds = {node.node_id: node.kind for node in context.graph.nodes}
+
     by_node: dict[str, list[FailureSignal]] = {}
     for signal in signals:
         if signal.detector in _EVIDENCE_ONLY_DETECTORS:
+            continue
+        if kinds.get(signal.node_id) in _NON_STEP_KINDS:
             continue
         if positions.get(signal.node_id, 0) > observed_position:
             continue
