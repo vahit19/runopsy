@@ -29,6 +29,13 @@ from runopsy_replay import (
     evidence_from_stored_run,
     execute_plan,
 )
+from runopsy_semantic import (
+    API_KEY_VARIABLE,
+    Budget,
+    OpenRouterClient,
+    resolve_api_key,
+    review_diagnosis,
+)
 
 app = typer.Typer(
     name="runopsy",
@@ -207,12 +214,31 @@ def diagnose(
             help="Exit non-zero when a candidate is found, for use in CI.",
         ),
     ] = False,
+    mode: Annotated[
+        str,
+        typer.Option("--mode", help="deterministic (free, offline) or hybrid (asks a model)."),
+    ] = "deterministic",
+    budget_usd: Annotated[
+        float | None, typer.Option("--budget-usd", help="Spend ceiling for hybrid mode.")
+    ] = None,
+    model: Annotated[
+        str | None, typer.Option("--model", help="Model to review suspicious steps with.")
+    ] = None,
 ) -> None:
     """Analyse a run and report where it started going wrong.
 
-    Deterministic only: this spends no tokens, needs no provider, and produces the same
-    answer every time it is given the same trace.
+    The default mode spends no tokens, needs no provider, and gives the same answer
+    every time. ``--mode hybrid`` additionally asks a model about the few steps the
+    deterministic engine already found suspicious; it is bounded by a budget, cached,
+    and can only add evidence — never a verdict.
     """
+    if mode not in {"deterministic", "hybrid"}:
+        errors.print(f"Unknown mode {mode!r}. Use deterministic or hybrid.", style="red")
+        raise typer.Exit(code=2)
+
+    ledger = None
+    withheld: tuple[str, ...] = ()
+
     with Collector.open(store) as collector:
         run_id = _resolve_run(collector, run)
         events = collector.events(run_id)
@@ -220,9 +246,36 @@ def diagnose(
             errors.print(f"No events recorded for run {run_id}.", style="red")
             raise typer.Exit(code=2)
 
-        context = AnalysisContext.from_events(run_id, events, _config().detector_settings)
-        bundle = run_diagnosis(context)
+        config = _config()
+        context = AnalysisContext.from_events(run_id, events, config.detector_settings)
         summary = collector.store.run(run_id)
+
+        if mode == "hybrid":
+            key = resolve_api_key()
+            if key is None:
+                errors.print(
+                    f"No {API_KEY_VARIABLE} found, so hybrid mode cannot run. "
+                    "Falling back to deterministic analysis, which needs no key.",
+                    style="yellow",
+                )
+                bundle = run_diagnosis(context)
+            else:
+                budget = Budget(
+                    max_calls=config.semantic_max_calls,
+                    max_cost_usd=budget_usd
+                    if budget_usd is not None
+                    else config.semantic_cost_budget_usd,
+                )
+                result = review_diagnosis(
+                    context,
+                    OpenRouterClient(key, model=model or config.semantic_model),
+                    budget=budget,
+                    vault=collector.vault if config.vault_enabled else None,
+                    cache_dir=collector.paths.root / "semantic-cache",
+                )
+                bundle, ledger, withheld = result.bundle, result.ledger, result.withheld
+        else:
+            bundle = run_diagnosis(context)
 
         # Replay experiments recorded against this run — in this session or an earlier
         # one — are folded in here. This is the only path that can raise a candidate to
@@ -238,6 +291,12 @@ def diagnose(
         typer.echo(bundle.model_dump_json(indent=2))
     else:
         console.print(render.diagnosis(bundle, context.graph, summary))
+        if ledger is not None:
+            console.print(f"\nSemantic review: {ledger.describe()}.", style="dim")
+            if ledger.stopped_because:
+                console.print(f"Stopped early: {ledger.stopped_because}.", style="yellow")
+            for item in withheld:
+                console.print(f"Withheld from the model: {item}", style="dim")
 
     if fail_on_finding and bundle.candidates:
         raise typer.Exit(code=1)

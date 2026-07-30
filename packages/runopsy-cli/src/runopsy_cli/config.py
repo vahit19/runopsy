@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from runopsy_core import DetectorSettings
+from runopsy_semantic import DEFAULT_MODEL
+from runopsy_semantic.budget import MAX_COST_USD, MAX_DIAGNOSTIC_CALLS
 
 CONFIG_ENV_VAR = "RUNOPSY_CONFIG"
 CONFIG_FILENAME = "runopsy.toml"
@@ -36,6 +38,7 @@ _KNOWN: dict[str, set[str]] = {
         "token_budget",
         "cost_budget_usd",
     },
+    "semantic": {"model", "max_calls", "cost_budget_usd"},
     "replay": {"step_timeout_seconds", "sandbox_ignore"},
     "privacy": {"vault"},
 }
@@ -49,6 +52,10 @@ class RunopsyConfig:
     replay_timeout_seconds: int = 600
     replay_sandbox_ignore: tuple[str, ...] = ()
     """Extra patterns excluded from the sandbox copy, on top of the built-in set."""
+
+    semantic_model: str = DEFAULT_MODEL
+    semantic_max_calls: int = MAX_DIAGNOSTIC_CALLS
+    semantic_cost_budget_usd: float = MAX_COST_USD
 
     vault_enabled: bool = True
     """Whether payload text is kept locally for replay.
@@ -102,6 +109,7 @@ def load_config(path: Path | None = None) -> RunopsyConfig:
     analysis = data.get("analysis", {}) if isinstance(data.get("analysis"), dict) else {}
     replay = data.get("replay", {}) if isinstance(data.get("replay"), dict) else {}
     privacy = data.get("privacy", {}) if isinstance(data.get("privacy"), dict) else {}
+    semantic = data.get("semantic", {}) if isinstance(data.get("semantic"), dict) else {}
 
     settings = DetectorSettings(
         retry_threshold=int(analysis.get("retry_threshold", 3)),
@@ -118,6 +126,9 @@ def load_config(path: Path | None = None) -> RunopsyConfig:
         replay_sandbox_ignore=tuple(str(pattern) for pattern in ignore)
         if isinstance(ignore, list)
         else (),
+        semantic_model=str(semantic.get("model", DEFAULT_MODEL)),
+        semantic_max_calls=int(semantic.get("max_calls", MAX_DIAGNOSTIC_CALLS)),
+        semantic_cost_budget_usd=float(semantic.get("cost_budget_usd", MAX_COST_USD)),
         vault_enabled=bool(privacy.get("vault", True)),
         warnings=tuple(warnings),
         source=resolved,
@@ -145,6 +156,14 @@ cost_budget_usd = 0.0
 step_timeout_seconds = 600
 # Extra directories excluded from the sandbox copy (added to the built-in set).
 sandbox_ignore = []
+
+[semantic]
+# Only used by: runopsy diagnose --mode hybrid. Never touched otherwise.
+# The model that reviews suspicious steps. Bring your own OPENROUTER_API_KEY.
+model = "openai/gpt-4o-mini"
+# Ceilings, checked before each call rather than after.
+max_calls = 2
+cost_budget_usd = 0.10
 
 [privacy]
 # Keep command text locally so replays can re-run it. The trace itself always

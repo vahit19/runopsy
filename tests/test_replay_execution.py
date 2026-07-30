@@ -302,9 +302,7 @@ class TestFullLoopThroughTheCli:
         assert result.exit_code == 2
         assert "one intervention" in result.output
 
-    def test_a_store_inside_the_project_does_not_break_the_sandbox(
-        self, project: Path
-    ) -> None:
+    def test_a_store_inside_the_project_does_not_break_the_sandbox(self, project: Path) -> None:
         """Regression: the copy must exclude the store, whatever it is named.
 
         With the store inside the working directory, the sandbox copy used to include

@@ -10,6 +10,7 @@ dependencies = [
     "runopsy-bench",
     "runopsy-replay",
     "runopsy-adapter",
+    "runopsy-semantic",
 ]
 
 [tool.uv]
@@ -25,6 +26,7 @@ runopsy-cli = { workspace = true }
 runopsy-bench = { workspace = true }
 runopsy-replay = { workspace = true }
 runopsy-adapter = { workspace = true }
+runopsy-semantic = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -42,7 +44,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["packages/runopsy-core/src", "packages/runopsy-collector/src", "packages/runopsy-cli/src", "packages/runopsy-bench/src", "packages/runopsy-replay/src", "packages/runopsy-adapter/src", "tests"]
+src = ["packages/runopsy-core/src", "packages/runopsy-collector/src", "packages/runopsy-cli/src", "packages/runopsy-bench/src", "packages/runopsy-replay/src", "packages/runopsy-adapter/src", "packages/runopsy-semantic/src", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -70,7 +72,7 @@ python_version = "3.12"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
-mypy_path = "packages/runopsy-core/src:packages/runopsy-collector/src:packages/runopsy-cli/src:packages/runopsy-bench/src:packages/runopsy-replay/src:packages/runopsy-adapter/src"
+mypy_path = "packages/runopsy-core/src:packages/runopsy-collector/src:packages/runopsy-cli/src:packages/runopsy-bench/src:packages/runopsy-replay/src:packages/runopsy-adapter/src:packages/runopsy-semantic/src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
