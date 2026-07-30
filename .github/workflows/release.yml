@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and check without publishing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: full gate before anything is published
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run coverage run -m pytest
+      - run: uv run coverage report
+      # A release must not move the numbers without recording them.
+      - run: uv run runopsy bench --write benchmarks/baseline-report.md
+      - run: git diff --exit-code benchmarks/baseline-report.md
+
+  build:
+    name: build distributions
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Version must match the tag
+        # A wheel whose version disagrees with the tag that produced it is unrepairable
+        # once published: the index keeps the file forever.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          declared=$(grep -m1 '^version' packages/runopsy-cli/pyproject.toml | cut -d'"' -f2)
+          if [ "$tag" != "$declared" ]; then
+            echo "tag $tag does not match runopsy-cli version $declared" >&2
+            exit 1
+          fi
+
+      - name: Build every package
+        run: |
+          for package in packages/*/; do
+            uv build "$package" --out-dir dist
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Only a tag publishes. A manual run builds and verifies without releasing, so the
+    # pipeline can be exercised without spending a version number.
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      # Trusted publishing: no long-lived token in repository secrets to leak.
+      - uses: pypa/gh-action-pypi-publish@release/v1

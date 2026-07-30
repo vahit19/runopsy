@@ -33,6 +33,17 @@ and the project uses semantic versioning once published.
   report; CI on three platforms; security workflow with dependency audit, static
   analysis, secret scan and SBOM.
 
+### Added (continued)
+- **`runopsy setup`** stores a provider key in the OS credential store, and resolution
+  now honours flag, environment, keyring and a developer `.env` in that order, with
+  `doctor` naming the source and never the value.
+- **Local API and `runopsy ui`** (section 19.2): runs, graph, diagnosis, replay plan and
+  the HTML report over loopback. Replay execution is deliberately not exposed.
+- **Fault injection** (`runopsy bench --inject`): break a clean run on purpose and score
+  the engine on faults it was not written from.
+- **Release workflow** with a full three-platform gate, a tag-versus-version check and
+  trusted publishing.
+
 ### Measured
 - Onset localization on 20 labelled synthetic traces: top-1 94.4%, top-3 100%, mean
   step distance 0.11, zero false positives. `last_failure` (reading a log bottom-up)

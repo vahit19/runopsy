@@ -79,6 +79,20 @@ sessions:
 uv run runopsy adapter hermes    # prints the config to paste into cli-config.yaml
 ```
 
+## Prove it, don't just rank it
+
+A suspicion becomes a supported cause only when an experiment says so:
+
+```bash
+uv run runopsy replay latest --from-step 9 --execute --substitute "make config ENV=prod"
+```
+
+The replayable steps run in a **disposable copy** of your project — never the working
+tree — with external and destructive steps excluded. If the downstream failures disappear
+when the onset is changed, `runopsy diagnose` upgrades that candidate to *cause, supported
+by replay*. If they do not, it says so. A straight re-run without an intervention is
+reported as reproduction, never as causation.
+
 ## Commands
 
 | command | what it does |
@@ -86,12 +100,37 @@ uv run runopsy adapter hermes    # prints the config to paste into cli-config.ya
 | `runopsy record -s CMD` | run commands and record them as a trace |
 | `runopsy runs` | list recorded runs |
 | `runopsy diagnose [RUN]` | find the onset, the evidence and the propagation |
+| `runopsy diagnose --mode hybrid` | additionally ask a model about the suspicious steps |
 | `runopsy evidence --step N` | why one step was flagged and how it ranked |
-| `runopsy replay --from-step N` | plan a controlled re-run — never executes |
+| `runopsy replay --from-step N` | plan a controlled re-run; `--execute` tests it |
 | `runopsy export [-o FILE]` | a self-contained HTML report |
-| `runopsy bench [--compare]` | score the engine against labelled traces |
+| `runopsy ui` | a local web view, loopback only |
+| `runopsy bench [--compare\|--inject]` | score the engine against labelled traces |
+| `runopsy config --init` | write a commented `runopsy.toml` |
+| `runopsy setup` | store a provider key in the OS keyring |
 | `runopsy doctor` | what is configured, without revealing any secret |
 | `runopsy adapter hermes` | configuration to connect a runtime |
+
+## The optional paid layer
+
+Everything above is free and offline. `--mode hybrid` asks a model about the few steps
+the deterministic engine already found suspicious, which is the only way to reach a step
+that *succeeded* while doing the wrong thing:
+
+```bash
+uv run runopsy setup                       # key goes to the OS keyring, not a file
+uv run runopsy diagnose --mode hybrid --budget-usd 0.05
+```
+
+A model finding is capped below the deterministic engine's own confidence ceiling and
+labelled *model judgement, unverified*. It can add evidence; it can never produce a
+verdict.
+
+**A note on the default budget.** `max_calls` defaults to 2, which is enough to
+corroborate a candidate the engine already found. Reaching a silent step several places
+upstream needs more — in a live test it took four calls, at a total cost of $0.0004. The
+default is deliberately low because the ceiling is your money; raise it in
+`runopsy.toml` under `[semantic]` when you want the deeper search.
 
 ## How it works
 
@@ -122,19 +161,24 @@ These are enforced by tests, not by convention:
   confidence. No output path asserts causation for an unvalidated finding.
 - **Bring your own key.** No credential is bundled, defaulted, or proxied through any
   service we operate.
-- **Replay proposes, never acts.** External and destructive steps are excluded from
-  replay outright; unrecognised tools require human approval. The gate fails closed.
+- **Replay asks first, and runs in a copy.** Execution requires an explicit `--execute`
+  and a confirmation, happens in a disposable sandbox rather than your working tree, and
+  excludes external and destructive steps outright. Unrecognised tools need approval —
+  the gate fails closed.
 - **Observing never breaks the observed.** A runtime hook that cannot record swallows the
   failure and exits cleanly.
 
 ## Status
 
-The first sprint of the design document is complete: schema, collector, 15 detectors,
-ranking, CLI, replay planning, HTML export, benchmark, and a Hermes adapter verified
-against hermes-agent 0.19.0.
+Schema, collector, 15 detectors, ranking, causal replay with counterfactual
+validation, an optional semantic layer, a local API, fault injection, and a Hermes
+adapter verified against hermes-agent 0.19.0.
 
-Not built yet: replay execution, the semantic analysis layer, the FastAPI server, the
-React UI, and the fault-injection benchmark layers.
+All ten sprint items are done, plus replay execution, the semantic layer, fault
+injection, the local API and keyring onboarding.
+
+Not built yet: a React UI beyond the served HTML report, the opt-in real-run corpus
+(section 17.1 layer four), and publication to PyPI.
 
 ## Contributing
 
