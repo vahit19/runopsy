@@ -82,7 +82,13 @@ class TokenUsage(_Payload):
 
 
 class RunPayload(_Payload):
-    """Identity of the run and the runtime that produced it."""
+    """Identity of the run and the runtime that produced it.
+
+    A replay run carries its lineage explicitly: the run it forked from, and exactly
+    what was changed. The intervention is recorded structurally rather than as prose
+    because a replay that cannot say what it varied proves nothing — the comparison
+    downstream keys off these fields.
+    """
 
     task: str = ""
     repo: str | None = None
@@ -91,6 +97,10 @@ class RunPayload(_Payload):
     model: str | None = None
     outcome: RunOutcome = RunOutcome.UNKNOWN
     summary: str | None = None
+    parent_run_id: Identifier | None = None
+    intervention_kind: Literal["skip", "substitute"] | None = None
+    intervention_target: int | None = Field(default=None, ge=0)
+    """Sequence number in the parent run that the intervention was applied to."""
 
 
 class AgentPayload(_Payload):

@@ -1451,12 +1451,14 @@ version = "0.1.0"
 source = { editable = "packages/runopsy-replay" }
 dependencies = [
     { name = "pydantic" },
+    { name = "runopsy-adapter" },
     { name = "runopsy-core" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.8" },
+    { name = "runopsy-adapter", editable = "packages/runopsy-adapter" },
     { name = "runopsy-core", editable = "packages/runopsy-core" },
 ]
 

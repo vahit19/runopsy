@@ -13,19 +13,23 @@ from runopsy_core.integrity import IntegrityReport, check_integrity
 from runopsy_core.normalize import build_graph
 from runopsy_core.ranking import MAX_UNVALIDATED_CONFIDENCE, RankingWeights, rank_candidates
 from runopsy_core.schema import SCHEMA_VERSION
+from runopsy_core.validate import REPLAY_SUPPORTED_CONFIDENCE, ReplayEvidence, apply_replay_evidence
 
 __version__ = "0.1.0"
 
 __all__ = [
     "MAX_UNVALIDATED_CONFIDENCE",
+    "REPLAY_SUPPORTED_CONFIDENCE",
     "SCHEMA_VERSION",
     "AnalysisContext",
     "DetectorRegistry",
     "DetectorSettings",
     "IntegrityReport",
     "RankingWeights",
+    "ReplayEvidence",
     "__version__",
     "affected_nodes",
+    "apply_replay_evidence",
     "build_graph",
     "check_integrity",
     "default_registry",

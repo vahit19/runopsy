@@ -15,7 +15,7 @@ from rich.text import Text
 from runopsy_cli.language import confidence_phrase, gloss, heading, next_step_hint, style
 from runopsy_collector import RunSummary
 from runopsy_core.schema import DiagnosisBundle, DiagnosisCandidate, TraceGraph
-from runopsy_replay import ReplayPlan, StepAction
+from runopsy_replay import ReplayPlan, ReplayVerdict, StepAction
 
 MAX_LISTED_CANDIDATES = 5
 DIGEST_PREVIEW = 14
@@ -225,6 +225,71 @@ def replay_plan(plan: ReplayPlan) -> RenderableType:
             padding=(0, 1),
         )
     )
+    return Group(*parts)
+
+
+def replay_verdict(verdict: ReplayVerdict) -> RenderableType:
+    """What the experiment showed — with its epistemic weight stated, not implied."""
+    parts: list[RenderableType] = []
+
+    header = Text()
+    header.append(f"Replay {verdict.replay_run_id}", style="bold")
+    if verdict.intervened:
+        header.append(
+            f"\nintervention: {verdict.intervention_kind} at step {verdict.intervention_target}",
+            style="dim",
+        )
+    else:
+        header.append("\nno intervention: a straight re-run", style="dim")
+    parts.append(header)
+
+    ran = [step for step in verdict.executed if step.ran]
+    lines = Text("\n")
+    lines.append(f"{len(ran)} step(s) re-ran", style="dim")
+    if verdict.skipped:
+        lines.append(f", {len(verdict.skipped)} skipped", style="dim")
+    lines.append(".\n", style="dim")
+    for step in verdict.skipped:
+        lines.append(f"  step {step.original_sequence}: {step.skipped_reason}\n", style="dim")
+    parts.append(lines)
+
+    if verdict.supports_onset:
+        outcome = Text()
+        outcome.append("Cause, supported by replay\n", style="bold green")
+        outcome.append(
+            "Changing the suspected onset made the downstream failures disappear. "
+            "The diagnosis for the original run now reflects this:\n",
+        )
+        outcome.append(f"  runopsy diagnose {verdict.parent_run_id}\n", style="dim")
+        parts.append(outcome)
+    elif verdict.intervened:
+        outcome = Text()
+        outcome.append("Not supported\n", style="bold yellow")
+        outcome.append(
+            "The downstream failures did not disappear when the onset was changed. "
+            "Either this step is not the cause, or the failure depends on state the "
+            "sandbox could not reproduce.\n"
+        )
+        parts.append(outcome)
+    elif verdict.reproduced:
+        outcome = Text()
+        outcome.append("Reproduced\n", style="bold")
+        outcome.append(
+            "The same steps failed again. That shows the failure is stable enough to "
+            "study — it does not show what caused it. To test the suspected onset, "
+            "re-run with --skip-onset or --substitute.\n",
+            style="dim",
+        )
+        parts.append(outcome)
+    else:
+        parts.append(
+            Text(
+                "Inconclusive: the failing steps could not be compared, so this replay "
+                "neither supports nor weakens the diagnosis.",
+                style="yellow",
+            )
+        )
+
     return Group(*parts)
 
 

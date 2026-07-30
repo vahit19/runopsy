@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from runopsy_adapter.recorder import EventSink, RunRecorder
+from runopsy_adapter.recorder import EventSink, PayloadStore, RunRecorder
 from runopsy_core.schema import CallStatus, RunOutcome
 
 ADAPTER_NAME = "shell"
@@ -64,6 +64,7 @@ def record_steps(
     run_id: str,
     task: str,
     sink: EventSink,
+    vault: PayloadStore | None = None,
     cwd: Path | None = None,
     stop_on_failure: bool = False,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
@@ -78,7 +79,7 @@ def record_steps(
     """
     outcomes: list[StepOutcome] = []
 
-    with RunRecorder(run_id, sink) as recorder:
+    with RunRecorder(run_id, sink, vault=vault) as recorder:
         recorder.start_run(
             task=task,
             runtime=ADAPTER_NAME,

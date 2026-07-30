@@ -15,6 +15,7 @@ from typing import Self
 from runopsy_collector.journal import EventJournal, serialize
 from runopsy_collector.paths import StorePaths
 from runopsy_collector.store import EventStore, RunSummary
+from runopsy_collector.vault import PayloadVault
 from runopsy_core import IntegrityReport, check_integrity
 from runopsy_core.schema import Event
 
@@ -26,6 +27,7 @@ class Collector:
         self.paths = paths
         paths.ensure()
         self.store = EventStore(paths.database)
+        self.vault = PayloadVault(paths.vault_dir)
 
     @classmethod
     def open(cls, root: Path | None = None) -> Self:

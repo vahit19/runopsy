@@ -44,6 +44,14 @@ class EventSink(Protocol):
         ...
 
 
+class PayloadStore(Protocol):
+    """Where payload text goes so a replay can re-run it. A vault is the usual one."""
+
+    def put(self, original_text: str, *, stored_text: str | None = None) -> str:
+        """Store a payload, returning the digest of the original text."""
+        ...
+
+
 class ListSink:
     """An in-memory sink, for tests and for adapters that batch."""
 
@@ -77,14 +85,27 @@ class RunRecorder:
         *,
         agent_id: str = "main",
         clock: Callable[[], datetime] = _utc_now,
+        vault: PayloadStore | None = None,
     ) -> None:
         self.run_id = run_id
         self.sink = sink
         self.agent_id = agent_id
         self._clock = clock
+        self._vault = vault
         self._sequence = 0
         self._started = False
         self._ended = False
+
+    def _preserve(self, text: str | None) -> None:
+        """Keep payload text in the local vault so a replay can re-run it.
+
+        The redacted form is what gets stored: the vault lives on the user's machine,
+        but a secret written anywhere is a secret that outlives the scan that found it.
+        """
+        if text is None or self._vault is None:
+            return
+        result = scan(text)
+        self._vault.put(text, stored_text=result.redacted if result.found else None)
 
     @property
     def sequence(self) -> int:
@@ -108,8 +129,15 @@ class RunRecorder:
         repo: str | None = None,
         provider: str | None = None,
         model: str | None = None,
+        parent_run_id: str | None = None,
+        intervention_kind: str | None = None,
+        intervention_target: int | None = None,
     ) -> str:
-        """Open the run. Must be called before anything else is recorded."""
+        """Open the run. Must be called before anything else is recorded.
+
+        A replay run must name its parent and what it varied; the comparison that can
+        upgrade a suspicion to a supported cause keys off exactly these fields.
+        """
         if self._started:
             msg = f"run {self.run_id} was already started"
             raise RuntimeError(msg)
@@ -123,7 +151,14 @@ class RunRecorder:
                 sequence=sequence,
                 timestamp=moment,
                 run=RunPayload(
-                    task=task, repo=repo, runtime=runtime, provider=provider, model=model
+                    task=task,
+                    repo=repo,
+                    runtime=runtime,
+                    provider=provider,
+                    model=model,
+                    parent_run_id=parent_run_id,
+                    intervention_kind=intervention_kind,
+                    intervention_target=intervention_target,
                 ),
             )
         )
@@ -152,6 +187,7 @@ class RunRecorder:
         for text in (arguments, output):
             if text is not None:
                 found.extend(scan(text).kinds)
+                self._preserve(text)
 
         resolved = status or (CallStatus.ERROR if exit_code not in (None, 0) else CallStatus.OK)
         return self._emit(

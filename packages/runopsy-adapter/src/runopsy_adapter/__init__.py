@@ -7,7 +7,7 @@ from runopsy_adapter.contract import (
     describe_contract,
     warn_about_state_keys,
 )
-from runopsy_adapter.recorder import EventSink, ListSink, RunRecorder
+from runopsy_adapter.recorder import EventSink, ListSink, PayloadStore, RunRecorder
 from runopsy_adapter.secrets import ScanResult, contains_secret, scan
 from runopsy_adapter.shell import ADAPTER_NAME, StepOutcome, record_steps
 
@@ -18,6 +18,7 @@ __all__ = [
     "ContractViolationError",
     "EventSink",
     "ListSink",
+    "PayloadStore",
     "RunRecorder",
     "ScanResult",
     "StepOutcome",

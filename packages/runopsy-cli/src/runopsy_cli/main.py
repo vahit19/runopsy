@@ -16,12 +16,19 @@ from rich.table import Table
 from runopsy_adapter import hermes, record_steps
 from runopsy_bench import compare_strategies, comparison_markdown, run_benchmark
 from runopsy_cli import render
+from runopsy_cli.config import CONFIG_FILENAME, RunopsyConfig, example_config, load_config
 from runopsy_cli.report import render_report
 from runopsy_collector import Collector
-from runopsy_core import AnalysisContext
+from runopsy_core import AnalysisContext, apply_replay_evidence
 from runopsy_core import diagnose as run_diagnosis
 from runopsy_core.detectors import default_registry
-from runopsy_replay import Intervention, build_plan
+from runopsy_replay import (
+    DEFAULT_SANDBOX_IGNORES,
+    Intervention,
+    build_plan,
+    evidence_from_stored_run,
+    execute_plan,
+)
 
 app = typer.Typer(
     name="runopsy",
@@ -42,6 +49,14 @@ StoreOption = Annotated[
     typer.Option("--store", help="Store directory. Defaults to .runopsy in the project."),
 ]
 RunArgument = Annotated[str, typer.Argument(help="Run id, or 'latest' for the most recent.")]
+
+
+def _config() -> RunopsyConfig:
+    """Load runopsy.toml once per command, surfacing its warnings."""
+    loaded = load_config()
+    for warning in loaded.warnings:
+        errors.print(warning, style="yellow")
+    return loaded
 
 
 def _resolve_run(collector: Collector, run_id: str) -> str:
@@ -158,6 +173,7 @@ def record(
             run_id=identifier,
             task=task,
             sink=collector,
+            vault=collector.vault if _config().vault_enabled else None,
             stop_on_failure=stop_on_failure,
         )
         report = collector.integrity(identifier)
@@ -204,9 +220,19 @@ def diagnose(
             errors.print(f"No events recorded for run {run_id}.", style="red")
             raise typer.Exit(code=2)
 
-        context = AnalysisContext.from_events(run_id, events)
+        context = AnalysisContext.from_events(run_id, events, _config().detector_settings)
         bundle = run_diagnosis(context)
         summary = collector.store.run(run_id)
+
+        # Replay experiments recorded against this run — in this session or an earlier
+        # one — are folded in here. This is the only path that can raise a candidate to
+        # replay_supported, and it works from the journals alone.
+        for child in collector.runs():
+            if child.run_id == run_id:
+                continue
+            evidence = evidence_from_stored_run(events, collector.events(child.run_id))
+            if evidence is not None and evidence.parent_run_id == run_id:
+                bundle = apply_replay_evidence(bundle, context.graph, evidence)
 
     if as_json:
         typer.echo(bundle.model_dump_json(indent=2))
@@ -258,20 +284,38 @@ def replay(
     model: Annotated[
         str | None, typer.Option("--model", help="Model to use instead of the original.")
     ] = None,
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run/--no-dry-run", help="Kept for symmetry; always a plan.")
-    ] = True,
+    execute: Annotated[
+        bool,
+        typer.Option("--execute", help="Run the plan in a sandbox copy of this directory."),
+    ] = False,
+    skip_onset: Annotated[
+        bool,
+        typer.Option("--skip-onset", help="Intervention: omit the onset step and re-run the rest."),
+    ] = False,
+    substitute: Annotated[
+        str | None,
+        typer.Option("--substitute", help="Intervention: replace the onset step's command."),
+    ] = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Skip the confirmation prompt.")] = False,
 ) -> None:
-    """Plan a controlled re-run from a chosen step.
+    """Plan a controlled re-run from a chosen step; with --execute, actually test it.
 
-    This produces a proposal and stops. Nothing is executed, no file is touched, and no
-    tool is called again. Execution belongs to a runtime adapter and is deliberately a
-    separate step, because a replay is the only thing here that can change the world and
-    that decision belongs to a person reading a written plan.
+    Without --execute this produces a proposal and stops. With it, the replayable steps
+    run in a disposable sandbox copy of the current directory — never in the working
+    tree, and never any step the plan blocked. An intervention (--skip-onset or
+    --substitute) turns the run into a counterfactual experiment: if the downstream
+    failures disappear, the suspected onset is upgraded to a replay-supported cause.
     """
     if from_step is None:
         errors.print(
             "Pass --from-step N. 'runopsy diagnose' suggests one for its top candidate.",
+            style="red",
+        )
+        raise typer.Exit(code=2)
+    if skip_onset and substitute is not None:
+        errors.print(
+            "Choose one intervention: --skip-onset or --substitute. Changing two things "
+            "at once would leave the result unable to say which change mattered.",
             style="red",
         )
         raise typer.Exit(code=2)
@@ -284,19 +328,63 @@ def replay(
             raise typer.Exit(code=2)
         context = AnalysisContext.from_events(run_id, events)
 
-    if not any(node.sequence == from_step for node in context.graph.nodes):
-        errors.print(f"Run {run_id} has no step {from_step}.", style="red")
-        raise typer.Exit(code=2)
+        if not any(node.sequence == from_step for node in context.graph.nodes):
+            errors.print(f"Run {run_id} has no step {from_step}.", style="red")
+            raise typer.Exit(code=2)
 
-    plan = build_plan(context, from_step, intervention=Intervention(model=model))
-    console.print(render.replay_plan(plan))
+        plan = build_plan(context, from_step, intervention=Intervention(model=model))
+        console.print(render.replay_plan(plan))
 
-    if not dry_run:
-        console.print(
-            "\nThis release plans replays but does not run them. Execution arrives with "
-            "the runtime adapter.",
-            style="yellow",
-        )
+        if not execute:
+            return
+
+        runnable = len(plan.replayable) + len(plan.needs_approval)
+        if not runnable:
+            errors.print("Nothing in this plan is safe to re-run.", style="red")
+            raise typer.Exit(code=1)
+        if not yes:
+            confirmed = typer.confirm(
+                f"Run {runnable} command(s) in a sandbox copy of {Path.cwd().name}?"
+            )
+            if not confirmed:
+                raise typer.Exit(code=1)
+
+        suffix = 1
+        while collector.store.run(f"{run_id}_replay{suffix}") is not None:
+            suffix += 1
+        cfg = _config()
+        ignores = DEFAULT_SANDBOX_IGNORES + cfg.replay_sandbox_ignore
+        # The store must never be copied into the sandbox: it holds the evidence the
+        # experiment is judged against, and on Windows its open database is locked,
+        # which fails the whole copy. Excluding it by its actual name covers stores
+        # that do not use the default .runopsy prefix.
+        store_root = collector.paths.root
+        if store_root.is_relative_to(Path.cwd()):
+            ignores += (store_root.relative_to(Path.cwd()).parts[0],)
+
+        try:
+            verdict = execute_plan(
+                plan,
+                context,
+                collector.vault,
+                collector,
+                replay_run_id=f"{run_id}_replay{suffix}",
+                substitute=substitute,
+                skip_onset=skip_onset,
+                approve_unknown=True,
+                sandbox_ignores=ignores,
+                timeout_seconds=cfg.replay_timeout_seconds,
+            )
+        except OSError as error:
+            errors.print(
+                f"Could not prepare the sandbox copy: {error}\n"
+                "If a file in this directory is locked by another process, close it or "
+                "exclude its directory via [replay] sandbox_ignore in runopsy.toml.",
+                style="red",
+            )
+            raise typer.Exit(code=1) from error
+
+    console.print(render.replay_verdict(verdict))
 
 
 @app.command()
@@ -463,3 +551,40 @@ def bench(
 
 if __name__ == "__main__":  # pragma: no cover
     app()
+
+
+@app.command(name="config")
+def config_command(
+    init: Annotated[
+        bool, typer.Option("--init", help="Write a commented runopsy.toml here.")
+    ] = False,
+) -> None:
+    """Show the effective configuration, or write a starter file.
+
+    Every key in the file is honored by the tool; unknown keys are reported rather than
+    silently ignored, so a typo cannot leave you believing in a setting that never took
+    effect.
+    """
+    target = Path.cwd() / CONFIG_FILENAME
+    if init:
+        if target.exists():
+            errors.print(f"{target} already exists; not overwriting.", style="red")
+            raise typer.Exit(code=2)
+        target.write_text(example_config(), encoding="utf-8")
+        console.print(f"Wrote {target}.")
+        return
+
+    loaded = _config()
+    table = Table(box=None, pad_edge=False, show_header=False)
+    table.add_row("config file", str(loaded.source) if loaded.source else "none (defaults)")
+    settings = loaded.detector_settings
+    table.add_row("retry_threshold", str(settings.retry_threshold))
+    table.add_row("loop_threshold", str(settings.loop_threshold))
+    table.add_row("stale_memory_hours", f"{settings.stale_memory_seconds / 3600:g}")
+    table.add_row("token_budget", str(settings.token_budget) if settings.token_budget else "off")
+    table.add_row("cost_budget_usd", f"{settings.cost_budget_usd:g}")
+    table.add_row("replay step timeout", f"{loaded.replay_timeout_seconds}s")
+    table.add_row("vault", "on" if loaded.vault_enabled else "off (replay execution disabled)")
+    console.print(table)
+    if loaded.source is None:
+        console.print("\nCreate one with: runopsy config --init", style="dim")

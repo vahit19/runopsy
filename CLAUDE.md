@@ -10,7 +10,7 @@ The ten-item first sprint from section 24 of the design document is complete. Th
 
 **Shipped:** `runopsy-core` (schema, normalizer, 15 detectors, impact, ranking, diagnosis) · `runopsy-collector` (JSONL journals + DuckDB index) · `runopsy-cli` (`runs`, `diagnose`, `evidence`, `replay`, `export`, `bench`, `doctor`) · `runopsy-replay` (planning with a fail-closed side-effect gate) · `runopsy-bench` (20 labelled cases, metrics, baselines).
 
-**Not built yet:** the Hermes runtime adapter (sprint item 1 remains a spike — nothing captures real runs yet, traces must be constructed), replay *execution*, the L3 semantic layer, FastAPI server, React UI, and fault-injection benchmark layers.
+**Not built yet:** the L3 semantic layer (needs provider calls), the FastAPI server, the React UI, fault-injection benchmark layers, keyring onboarding (`runopsy setup`), and PyPI publication. Replay *execution* now exists: `runopsy replay --execute` runs a counterfactual experiment in a sandbox copy, and a supporting result upgrades the candidate to `replay_supported` — including creating a candidate at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
 
 Measured onset localization, reproducible via `runopsy bench --compare` and recorded in `benchmarks/baseline-report.md`: top-1 94.4%, top-3 100%, mean step distance 0.11, zero false positives — against 22.2% for blaming the last failing step, which is what reading a log bottom-up achieves.
 

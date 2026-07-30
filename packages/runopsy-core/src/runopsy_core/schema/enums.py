@@ -92,6 +92,13 @@ class FailureCategory(StrEnum):
     BUDGET = "budget"
     SAFETY = "safety"
     OUTCOME = "outcome"
+    UNDETERMINED = "undetermined"
+    """Causation established, mechanism not classified.
+
+    Used when a counterfactual replay demonstrates that a step caused the failure but
+    nothing in the trace says *how* — the silent-wrong-value case the deterministic
+    layers cannot see. Naming a mechanism there would be a guess dressed as taxonomy.
+    """
 
 
 class Severity(StrEnum):

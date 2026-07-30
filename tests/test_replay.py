@@ -240,10 +240,10 @@ class TestReplayCommand:
         assert result.exit_code == 2
         assert "no step 999" in result.output.lower()
 
-    def test_asking_to_execute_says_it_is_not_available(self, store: Path) -> None:
-        """Better to refuse clearly than to imply a capability that is not there."""
-        result = runner.invoke(
-            app, ["replay", RUN, "--from-step", "5", "--store", str(store), "--no-dry-run"]
-        )
+    def test_without_execute_nothing_runs(self, store: Path) -> None:
+        """The plan alone must stay a pure proposal."""
+        result = runner.invoke(app, ["replay", RUN, "--from-step", "5", "--store", str(store)])
 
-        assert "does not run them" in result.output
+        assert result.exit_code == 0
+        with Collector.open(store) as collector:
+            assert collector.store.run(f"{RUN}_replay1") is None

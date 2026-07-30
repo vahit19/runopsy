@@ -73,6 +73,11 @@ class StorePaths:
         """Diagnosis bundles as JSON."""
         return self.root / "diagnoses"
 
+    @property
+    def vault_dir(self) -> Path:
+        """Content-addressed payload text, local-only, never exported."""
+        return self.root / "vault"
+
     def journal(self, run_id: str) -> Path:
         """Path to one run's event journal."""
         return self.runs_dir / _require_safe_run_id(run_id) / "events.jsonl"
