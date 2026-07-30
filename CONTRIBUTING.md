@@ -13,7 +13,8 @@ uv run pytest
 uv run ruff check . && uv run ruff format .
 uv run mypy packages/runopsy-core/src packages/runopsy-collector/src \
             packages/runopsy-cli/src packages/runopsy-bench/src \
-            packages/runopsy-replay/src packages/runopsy-adapter/src tests
+            packages/runopsy-replay/src packages/runopsy-adapter/src \
+            packages/runopsy-semantic/src packages/runopsy-server/src tests
 uv run runopsy bench --compare
 ```
 
@@ -80,6 +81,12 @@ Code is English, including comments and identifiers. Comments should state a con
 the code cannot show — not narrate the next line.
 
 Please do not add `Co-Authored-By` trailers naming an AI assistant.
+
+## Releasing
+
+See [RELEASING.md](RELEASING.md). The publish pipeline depends on settings that live in
+the GitHub and PyPI web interfaces rather than in this repository, so reading the
+workflow alone will not tell you what it needs.
 
 ## Security
 

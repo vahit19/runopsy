@@ -191,7 +191,8 @@ Measured at scale with `runopsy bench --perf`: 100,000 events ingest in about th
 seconds and every stage stays roughly linear.
 
 Not built yet: a React UI beyond the served HTML report, the opt-in real-run corpus
-(section 17.1 layer four), and publication to PyPI.
+(section 17.1 layer four), and publication to PyPI — see
+[RELEASING.md](RELEASING.md) for what publishing still needs.
 
 ## Contributing
 

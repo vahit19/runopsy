@@ -38,6 +38,16 @@ class TestEveryPackageIsWiredIn:
         )
 
     @pytest.mark.parametrize("package", PACKAGES)
+    def test_the_contributor_instructions_check_it_too(self, package: str) -> None:
+        """A contributor who runs the documented command should see what CI will see."""
+        instructions = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+        assert f"packages/{package}/src" in instructions, (
+            f"{package} is missing from the mypy command in CONTRIBUTING.md, so a "
+            "contributor would pass locally and fail in CI"
+        )
+
+    @pytest.mark.parametrize("package", PACKAGES)
     def test_the_workspace_resolves_it_locally(self, package: str) -> None:
         """Without this a package would resolve from PyPI, where it does not exist."""
         root = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
