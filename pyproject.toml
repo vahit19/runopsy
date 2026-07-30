@@ -5,6 +5,7 @@ description = "Runopsy monorepo root"
 requires-python = ">=3.12"
 dependencies = [
     "runopsy-core",
+    "runopsy-collector",
 ]
 
 [tool.uv]
@@ -15,6 +16,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 runopsy-core = { workspace = true }
+runopsy-collector = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -29,7 +31,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["packages/runopsy-core/src", "tests"]
+src = ["packages/runopsy-core/src", "packages/runopsy-collector/src", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -57,7 +59,7 @@ python_version = "3.12"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
-mypy_path = "packages/runopsy-core/src"
+mypy_path = "packages/runopsy-core/src:packages/runopsy-collector/src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -66,4 +68,4 @@ addopts = "-q --strict-markers --strict-config"
 
 [tool.coverage.run]
 branch = true
-source = ["runopsy_core"]
+source = ["runopsy_core", "runopsy_collector"]
