@@ -1,0 +1,8 @@
+# Normalize line endings so traces and fixtures hash identically across platforms.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary
+*.parquet binary
+*.duckdb binary
