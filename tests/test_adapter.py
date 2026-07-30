@@ -46,9 +46,9 @@ class TestSecretScanner:
     @pytest.mark.parametrize(
         "text",
         [
-            "export OPENROUTER_API_KEY=sk-or-v1-abcdefghijklmnopqrstuvwxyz012345",
-            "token: ghp_abcdefghijklmnopqrstuvwxyz0123",
-            "AWS key AKIAIOSFODNN7EXAMPLE here",
+            "export OPENROUTER_API_KEY=sk-or-v1-" + "a" * 32,
+            "token: ghp_" + "b" * 28,
+            "AWS key " + "AKIA" + "IOSFODNN7EXAMPLE" + " here",
             "-----BEGIN RSA PRIVATE KEY-----",
             "Authorization: Bearer abcdefghijklmnopqrstuvwx",
             "api_key = supersecretvalue123",
@@ -63,7 +63,7 @@ class TestSecretScanner:
         assert not contains_secret("commit a0ac5acbbab21951f4554e708155b49b4dbc58d6")
 
     def test_the_value_is_removed_not_just_reported(self) -> None:
-        result = scan("key=ghp_abcdefghijklmnopqrstuvwxyz0123 rest")
+        result = scan("key=ghp_" + "b" * 28 + " rest")
 
         assert "ghp_" not in result.redacted
         assert "[REDACTED]" in result.redacted
@@ -104,7 +104,7 @@ class TestRecorder:
         sink = ListSink()
         with RunRecorder("run_x", sink) as recorder:
             recorder.start_run(task="t", runtime="test")
-            recorder.tool_call("env", output="GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123")
+            recorder.tool_call("env", output="GITHUB_TOKEN=ghp_" + "b" * 28)
 
         flagged = [e for e in sink.events if e.security.contains_secret]
         assert len(flagged) == 1

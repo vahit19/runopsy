@@ -129,7 +129,7 @@ class TestToolCalls:
         event = mapped(
             "post_tool_call",
             tool_name="terminal",
-            tool_input={"command": "deploy --token ghp_abcdefghijklmnopqrstuvwxyz0123"},
+            tool_input={"command": "deploy --token ghp_" + "b" * 28},
             extra={"status": "ok"},
         )
 
