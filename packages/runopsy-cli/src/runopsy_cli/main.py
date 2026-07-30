@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from runopsy_bench import run_benchmark
+from runopsy_bench import compare_strategies, comparison_markdown, run_benchmark
 from runopsy_cli import render
 from runopsy_cli.report import render_report
 from runopsy_collector import Collector
@@ -263,12 +263,48 @@ def bench(
     verbose: Annotated[
         bool, typer.Option("--verbose", help="List every case and what was predicted.")
     ] = False,
+    compare: Annotated[
+        bool,
+        typer.Option("--compare", help="Score baselines beside the engine."),
+    ] = False,
+    write: Annotated[
+        Path | None,
+        typer.Option("--write", help="Write a Markdown comparison report to this path."),
+    ] = None,
 ) -> None:
     """Score the engine against labelled synthetic traces.
 
     Reproducible and offline: the suite is generated, not sampled, so the same code
     always produces the same numbers and a regression is visible immediately.
     """
+    if compare or write is not None:
+        reports = compare_strategies()
+        table = Table(box=None, pad_edge=False, header_style="bold")
+        table.add_column("strategy")
+        table.add_column("top-1", justify="right")
+        table.add_column("top-3", justify="right")
+        table.add_column("step distance", justify="right")
+        table.add_column("false positives", justify="right")
+        for scored in reports:
+            table.add_row(
+                scored.strategy_name,
+                f"{scored.top1_accuracy:.1%}",
+                f"{scored.top3_recall:.1%}",
+                f"{scored.mean_step_distance:.2f}",
+                f"{scored.false_positive_rate:.1%}",
+            )
+        console.print(table)
+        console.print(
+            "\nThe baseline that matters is last_failure: reading a log bottom-up is "
+            "free, so the engine has to beat it to be worth running.",
+            style="dim",
+        )
+        if write is not None:
+            write.parent.mkdir(parents=True, exist_ok=True)
+            write.write_text(comparison_markdown(reports), encoding="utf-8")
+            console.print(f"\nWrote {write}.")
+        return
+
     report = run_benchmark()
 
     table = Table(box=None, pad_edge=False, show_header=False)

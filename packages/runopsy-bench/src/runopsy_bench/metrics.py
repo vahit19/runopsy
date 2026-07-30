@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from runopsy_bench.baselines import Strategy, all_strategies
 from runopsy_bench.cases import SyntheticCase, all_cases
 from runopsy_core import AnalysisContext, diagnose
 from runopsy_core.detectors import DetectorRegistry
@@ -57,9 +58,10 @@ class CaseResult:
 
 @dataclass(frozen=True)
 class BenchmarkReport:
-    """Aggregate scores over the suite."""
+    """Aggregate scores over the suite for one strategy."""
 
     results: tuple[CaseResult, ...]
+    strategy_name: str = "rule_only"
 
     @property
     def scored(self) -> tuple[CaseResult, ...]:
@@ -123,9 +125,18 @@ class BenchmarkReport:
         return tuple(result for result in self.scored if not result.is_exact)
 
 
-def evaluate_case(case: SyntheticCase, *, registry: DetectorRegistry | None = None) -> CaseResult:
-    """Run the deterministic pipeline over one case and record what it predicted."""
+def evaluate_case(
+    case: SyntheticCase,
+    *,
+    registry: DetectorRegistry | None = None,
+    strategy: Strategy | None = None,
+) -> CaseResult:
+    """Score one case, using the deterministic engine unless another strategy is given."""
     context = AnalysisContext.from_events(case.events[0].run_id, case.events)
+
+    if strategy is not None:
+        return CaseResult(case=case, predicted_steps=strategy.predict(context))
+
     bundle = diagnose(context, registry=registry)
     positions = {node.node_id: node.sequence for node in context.graph.nodes}
     predicted = tuple(
@@ -140,9 +151,22 @@ def run_benchmark(
     cases: tuple[SyntheticCase, ...] | None = None,
     *,
     registry: DetectorRegistry | None = None,
+    strategy: Strategy | None = None,
 ) -> BenchmarkReport:
     """Score the whole suite."""
     selected = cases if cases is not None else all_cases()
     return BenchmarkReport(
-        results=tuple(evaluate_case(case, registry=registry) for case in selected)
+        strategy_name=strategy.name if strategy is not None else "rule_only",
+        results=tuple(
+            evaluate_case(case, registry=registry, strategy=strategy) for case in selected
+        ),
     )
+
+
+def compare_strategies(
+    strategies: tuple[Strategy, ...] | None = None,
+    cases: tuple[SyntheticCase, ...] | None = None,
+) -> tuple[BenchmarkReport, ...]:
+    """Score every strategy over the same cases, weakest first."""
+    selected = strategies if strategies is not None else all_strategies()
+    return tuple(run_benchmark(cases, strategy=strategy) for strategy in selected)
