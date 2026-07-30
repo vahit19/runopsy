@@ -11,6 +11,7 @@ dependencies = [
     "runopsy-replay",
     "runopsy-adapter",
     "runopsy-semantic",
+    "runopsy-server",
 ]
 
 [tool.uv]
@@ -27,6 +28,7 @@ runopsy-bench = { workspace = true }
 runopsy-replay = { workspace = true }
 runopsy-adapter = { workspace = true }
 runopsy-semantic = { workspace = true }
+runopsy-server = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -44,7 +46,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["packages/runopsy-core/src", "packages/runopsy-collector/src", "packages/runopsy-cli/src", "packages/runopsy-bench/src", "packages/runopsy-replay/src", "packages/runopsy-adapter/src", "packages/runopsy-semantic/src", "tests"]
+src = ["packages/runopsy-core/src", "packages/runopsy-collector/src", "packages/runopsy-cli/src", "packages/runopsy-bench/src", "packages/runopsy-replay/src", "packages/runopsy-adapter/src", "packages/runopsy-semantic/src", "packages/runopsy-server/src", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -66,13 +68,16 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
+# Depends() in a default argument is how FastAPI declares dependencies; the rule that
+# flags it predates that framework and has no way to tell it apart from a real bug.
+"packages/runopsy-server/src/*" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
-mypy_path = "packages/runopsy-core/src:packages/runopsy-collector/src:packages/runopsy-cli/src:packages/runopsy-bench/src:packages/runopsy-replay/src:packages/runopsy-adapter/src:packages/runopsy-semantic/src"
+mypy_path = "packages/runopsy-core/src:packages/runopsy-collector/src:packages/runopsy-cli/src:packages/runopsy-bench/src:packages/runopsy-replay/src:packages/runopsy-adapter/src:packages/runopsy-semantic/src:packages/runopsy-server/src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

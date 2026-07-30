@@ -541,6 +541,42 @@ def export(
 
 
 @app.command()
+def ui(
+    store: StoreOption = None,
+    port: Annotated[int, typer.Option("--port", help="Port to listen on.")] = 8756,
+    host: Annotated[
+        str, typer.Option("--host", help="Interface to bind. Loopback by default.")
+    ] = "127.0.0.1",
+) -> None:
+    """Serve a local web view of the recorded runs.
+
+    Binds to loopback and has no authentication, because everything it serves is the
+    contents of your repository. Binding it to another interface publishes that, so the
+    flag exists for people who know they are doing it and warns when they do.
+
+    Replay execution is deliberately absent from the web surface: it stays behind a
+    command you type, where the plan can be read first.
+    """
+    try:
+        import uvicorn
+
+        from runopsy_server import create_app
+    except ImportError as error:  # pragma: no cover - dependency is declared
+        errors.print(f"The server extras are not installed: {error}", style="red")
+        raise typer.Exit(code=1) from error
+
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        console.print(
+            f"Binding to {host} exposes your traces to anything that can reach this "
+            "machine. There is no authentication.",
+            style="yellow",
+        )
+
+    console.print(f"Runopsy at http://{host}:{port} — press Ctrl+C to stop.")
+    uvicorn.run(create_app(store), host=host, port=port, log_level="warning")
+
+
+@app.command()
 def doctor(store: StoreOption = None) -> None:
     """Report what is configured, without revealing any secret.
 
