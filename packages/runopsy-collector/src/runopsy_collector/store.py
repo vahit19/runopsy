@@ -220,14 +220,17 @@ class EventStore:
         Queried by run rather than by a list of ids: binding thousands of parameters to
         an ``IN`` clause measured at seconds, while this uses the run index and returns
         a set bounded by the size of the run being added to.
+
+        The run ids bind as a single list parameter rather than as a generated row of
+        placeholders, so the statement is a fixed string. That keeps the query plan
+        cacheable and leaves no way for a run id to reach the SQL text at all.
         """
         unique = sorted(set(run_ids))
         if not unique:
             return set()
-        placeholders = ", ".join("?" for _ in unique)
         rows = self._connection.execute(
-            f"SELECT event_id FROM events WHERE run_id IN ({placeholders})",
-            unique,
+            "SELECT event_id FROM events WHERE run_id IN (SELECT unnest(?))",
+            [unique],
         ).fetchall()
         return {str(row[0]) for row in rows}
 

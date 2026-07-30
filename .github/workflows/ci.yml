@@ -44,9 +44,13 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Type check
+        # Every package is named explicitly rather than globbed, because the shells
+        # differ across this matrix and an unexpanded glob would make mypy check
+        # nothing while still exiting zero. Adding a package means adding it here.
         run: uv run mypy packages/runopsy-core/src packages/runopsy-collector/src
              packages/runopsy-cli/src packages/runopsy-bench/src
-             packages/runopsy-replay/src packages/runopsy-adapter/src tests
+             packages/runopsy-replay/src packages/runopsy-adapter/src
+             packages/runopsy-semantic/src packages/runopsy-server/src tests
 
       - name: Test
         run: uv run coverage run -m pytest
