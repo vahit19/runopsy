@@ -4,12 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This is a **greenfield repository**. It currently contains only:
+The ten-item first sprint from section 24 of the design document is complete. The deterministic pipeline works end to end: record a run, diagnose it, read the evidence, plan a replay, export a report, and score the whole thing against baselines.
 
-- `runopsy-proje-tasarim-belgesi.pdf` — the 39-page Turkish design document (v0.2, 30 July 2026) that is the single source of truth for the product
-- `.env` (git-ignored, holds live credentials), `.env.example`, `.gitignore`, and this file
+`runopsy-proje-tasarim-belgesi.pdf` — the 39-page Turkish design document (v0.2, 30 July 2026) — remains the single source of truth. For anything this file does not cover, read the PDF rather than inventing an approach.
 
-There is no source code, no git repository, no build system, and no test suite yet. Everything below describes decisions already made in the design document, so scaffolding work stays consistent with it. For anything not covered here, read the PDF rather than inventing an approach.
+**Shipped:** `runopsy-core` (schema, normalizer, 15 detectors, impact, ranking, diagnosis) · `runopsy-collector` (JSONL journals + DuckDB index) · `runopsy-cli` (`runs`, `diagnose`, `evidence`, `replay`, `export`, `bench`, `doctor`) · `runopsy-replay` (planning with a fail-closed side-effect gate) · `runopsy-bench` (20 labelled cases, metrics, baselines).
+
+**Not built yet:** the Hermes runtime adapter (sprint item 1 remains a spike — nothing captures real runs yet, traces must be constructed), replay *execution*, the L3 semantic layer, FastAPI server, React UI, and fault-injection benchmark layers.
+
+Measured onset localization, reproducible via `runopsy bench --compare` and recorded in `benchmarks/baseline-report.md`: top-1 94.4%, top-3 100%, mean step distance 0.11, zero false positives — against 22.2% for blaming the last failing step, which is what reading a log bottom-up achieves.
+
+## Commands
+
+```bash
+uv sync                       # install; pins Python 3.12 via .python-version
+uv run pytest                 # 286 tests
+uv run pytest tests/test_diagnose.py::TestConfidence   # one class
+uv run ruff check . && uv run ruff format .
+uv run mypy packages/runopsy-core/src packages/runopsy-collector/src \
+            packages/runopsy-cli/src packages/runopsy-bench/src \
+            packages/runopsy-replay/src tests
+uv run python examples/coding_failure/seed.py   # seed the demo trace
+uv run runopsy diagnose --store .runopsy-demo
+uv run runopsy bench --write benchmarks/baseline-report.md
+```
+
+`uv` lives at `~/.local/bin` and may not be on PATH in a fresh shell.
 
 ## Authorship and commits
 
@@ -172,21 +192,23 @@ analysis: { mode: deterministic, llm_on: suspicious, max_diagnostic_calls: 2,
 
 **Failure taxonomy** (section 9): goal/input, planning, retrieval, tool selection, tool arguments, tool execution, state, memory, handoff, reasoning, validation, control flow, budget, safety, outcome.
 
-## Planned interfaces
+## Interfaces
 
-None of these exist yet — implement them to match these shapes.
+Implemented:
 
 ```bash
-runopsy setup | doctor
-runopsy adapter hermes status
-runopsy run --adapter hermes --provider openrouter -- "task"
-runopsy diagnose latest --mode deterministic|hybrid [--budget-usd 0.10]
-runopsy evidence latest --step 17
-runopsy graph latest --view causal
-runopsy replay latest --from-step 17 --model local:qwen --dry-run
-runopsy ui
-runopsy export latest --format html --redact
+runopsy runs
+runopsy diagnose [RUN|latest] [--json] [--fail-on-finding]
+runopsy evidence [RUN|latest] --step N
+runopsy replay  [RUN|latest] --from-step N [--model M]   # plans only, never executes
+runopsy export  [RUN|latest] [-o FILE] [--include-sensitive]
+runopsy bench [--compare] [--write PATH] [--verbose]
+runopsy doctor
 ```
+
+Still to come, per the design document: `setup` (keyring onboarding), `adapter hermes status`, `run` (needs the runtime adapter), `graph`, `ui`, and `--mode hybrid` once the semantic layer exists.
+
+Conventions worth preserving when adding commands: every command takes `--store`; `latest` resolves to the most recently started run; findings never fail the command unless CI opts in; anything that could leak is redacted by default.
 
 Hermes slash commands: `/runopsy status|diagnose|evidence <n>|graph|replay <n>|mode offline|budget <usd>`
 
@@ -202,6 +224,20 @@ Storage split: structured events → DuckDB · raw event stream → append-only 
 
 **MVP acceptance criteria (section 18.1)** — in offline mode zero external model calls; at least eight deterministic detectors working end to end; diagnosis JSON carrying evidence, confidence and affected nodes per candidate; dry-run plans for rollback and fork; risky external side-effect replay blocked by default; 2D timeline and causal graph sharing the same trace node IDs; reproducible benchmark report; one-command local demo.
 
-**First sprint order (section 24):** 1) Hermes plugin skeleton + hook spike → 2) trace schema v0.1 (Pydantic + JSON Schema) → 3) DuckDB collector → 4) deterministic detector registry → 5) diagnosis bundle → 6) CLI `diagnose`/`evidence` → 7) 20 synthetic failure fixtures with ground-truth onset → 8) 2D HTML graph → 9) checkpoint/fork dry-run → 10) rule-only benchmark baseline.
+**First sprint (section 24): complete**, except item 1 — the Hermes plugin remains a spike, so nothing yet captures a real run. That is the next thing that matters: every number above comes from constructed traces, and the engine has never seen a trace it did not help write.
 
 Priority rule: event capture and schema correctness first, then the deterministic engine, then evidence/2D UX, then replay and semantic evaluation, and 3D/cloud last.
+
+## Invariants a change must not break
+
+These are encoded in code and tests, not conventions. If one starts failing, the fix is the change, not the test.
+
+- A candidate may claim `replay_supported` only with a replay behind it, `human_verified` only with a named verifier. Confidence is capped below certainty for everything else.
+- No default detector may report a deterministic layer while calling a model. L0–L2 spend zero tokens.
+- Normalization emits no `AFFECTS` edges; propagation is inference and belongs to the impact layer, labelled and confidence-weighted.
+- Nothing may affect the past: propagation only reaches steps that ran later.
+- No output path asserts causation for an unvalidated finding (`runopsy_cli.language.asserts_causation` guards this).
+- The side-effect gate fails closed: an unrecognised tool needs human approval.
+- A healthy run produces no finding. The false-positive rate is exactly zero, not approximately.
+- The JSONL journal is authoritative; the DuckDB index is rebuildable from it.
+- Diagnosis is a pure function of the trace — no clock, no network, no model — so the same run always yields the same bundle.
