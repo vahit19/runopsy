@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Final
 
@@ -10,6 +11,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from runopsy_adapter import record_steps
 from runopsy_bench import compare_strategies, comparison_markdown, run_benchmark
 from runopsy_cli import render
 from runopsy_cli.report import render_report
@@ -49,6 +51,60 @@ def _resolve_run(collector: Collector, run_id: str) -> str:
         errors.print("No runs recorded yet.", style="red")
         raise typer.Exit(code=2)
     return resolved
+
+
+@app.command()
+def record(
+    step: Annotated[
+        list[str] | None,
+        typer.Option("--step", "-s", help="A command to run and record. Repeat for a pipeline."),
+    ] = None,
+    task: Annotated[
+        str, typer.Option("--task", help="What this run was trying to do.")
+    ] = "recorded shell run",
+    store: StoreOption = None,
+    run_id: Annotated[
+        str | None, typer.Option("--run-id", help="Identifier. Defaults to a timestamped one.")
+    ] = None,
+    stop_on_failure: Annotated[
+        bool, typer.Option("--stop-on-failure", help="Halt at the first failing step.")
+    ] = False,
+) -> None:
+    """Run commands and record them as a trace.
+
+    Execution continues past a failure by default, because that is what makes a trace
+    worth diagnosing: an agent carries on after a step goes wrong, and the distance
+    between the step that broke and the step where it became visible is the thing this
+    tool exists to close.
+
+    Commands run exactly as given, in a shell, with their real side effects. Recording
+    observes; it does not sandbox.
+    """
+    if not step:
+        errors.print(
+            'Pass at least one --step, for example: runopsy record -s "make" -s "pytest"',
+            style="red",
+        )
+        raise typer.Exit(code=2)
+
+    identifier = run_id or f"run_{datetime.now(UTC):%Y%m%dT%H%M%S}"
+
+    with Collector.open(store) as collector:
+        outcomes = record_steps(
+            step,
+            run_id=identifier,
+            task=task,
+            sink=collector,
+            stop_on_failure=stop_on_failure,
+        )
+        report = collector.integrity(identifier)
+
+    failed = sum(outcome.failed for outcome in outcomes)
+    console.print(
+        f"Recorded {identifier}: {len(outcomes)} step(s), {failed} failed ({report.describe()})."
+    )
+    if failed:
+        console.print(f"  runopsy diagnose {identifier}", style="dim")
 
 
 @app.command()
