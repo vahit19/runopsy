@@ -113,6 +113,14 @@ class DiagnosisCandidate(_Frozen):
     signal_ids: tuple[Identifier, ...] = ()
     evidence_node_ids: tuple[Identifier, ...] = ()
     affected_node_ids: tuple[Identifier, ...] = ()
+    score_breakdown: dict[str, float] = Field(default_factory=dict)
+    """Per-component contributions behind ``score``, so a ranking can be audited.
+
+    A user who disagrees with an ordering needs to see which term drove it — severity,
+    how early the step ran, or how much it touched — rather than being handed a number
+    to take on trust.
+    """
+
     replay_run_id: Identifier | None = None
     verified_by: str | None = None
 
