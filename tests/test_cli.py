@@ -240,8 +240,13 @@ class TestRunsAndDoctor:
         assert "deterministic" in output
 
     def test_doctor_never_prints_a_key(self, store: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A key printed to a terminal is a key in scrollback, screenshots and logs."""
-        secret = "sk-or-v1-averysecretvalue"
+        """A key printed to a terminal is a key in scrollback, screenshots and logs.
+
+        The sentinel deliberately avoids any real provider's key prefix. A realistic
+        looking fake in a public repository trips everyone else's secret scanner, and an
+        alert that is always false is an alert people learn to dismiss.
+        """
+        secret = "PLACEHOLDER-not-a-real-credential-0123456789"
         monkeypatch.setenv("OPENROUTER_API_KEY", secret)
 
         output = invoke("doctor", "--store", str(store))
