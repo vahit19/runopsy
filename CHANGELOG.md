@@ -44,6 +44,17 @@ and the project uses semantic versioning once published.
 - **Release workflow** with a full three-platform gate, a tag-versus-version check and
   trusted publishing.
 
+### Added (final)
+- **Performance measurement** (`runopsy bench --perf`) and the ingest rewrite it forced:
+  batched journal appends and DuckDB bulk loading took recording from 17 to 31,000
+  events per second.
+- **Retention** (`runopsy prune`): delete traces past a window, only on request, only
+  with `--apply`, never a run whose age is unknown.
+- **Structured logging** via `RUNOPSY_LOG`, silent by default and redacting anything
+  credential-shaped.
+- **OpenInference/OTLP export** (`runopsy export --otlp`), carrying the diagnosis as
+  span attributes.
+
 ### Measured
 - Onset localization on 20 labelled synthetic traces: top-1 94.4%, top-3 100%, mean
   step distance 0.11, zero false positives. `last_failure` (reading a log bottom-up)

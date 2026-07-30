@@ -18,7 +18,7 @@ from runopsy_cli import render
 from runopsy_cli.config import CONFIG_FILENAME, RunopsyConfig, example_config, load_config
 from runopsy_cli.report import render_report
 from runopsy_collector import Collector
-from runopsy_core import AnalysisContext, apply_replay_evidence
+from runopsy_core import AnalysisContext, apply_replay_evidence, to_otlp_json
 from runopsy_core import diagnose as run_diagnosis
 from runopsy_core.detectors import default_registry
 from runopsy_replay import (
@@ -508,6 +508,10 @@ def export(
             help="Keep values from steps flagged as containing secrets.",
         ),
     ] = False,
+    otlp: Annotated[
+        bool,
+        typer.Option("--otlp", help="Emit OpenInference-shaped OTLP JSON instead of HTML."),
+    ] = False,
 ) -> None:
     """Write a self-contained HTML report for a run.
 
@@ -527,8 +531,14 @@ def export(
         bundle = run_diagnosis(context)
         summary = collector.store.run(run_id)
 
-    document = render_report(bundle, context.graph, summary, redact=not include_sensitive)
-    destination = output or Path(f"{run_id}.html")
+    if otlp:
+        # Same redaction rules as the HTML report: an export is a sharing surface
+        # whichever format it takes.
+        document = to_otlp_json(context.graph, events, bundle, redact=not include_sensitive)
+        destination = output or Path(f"{run_id}.otlp.json")
+    else:
+        document = render_report(bundle, context.graph, summary, redact=not include_sensitive)
+        destination = output or Path(f"{run_id}.html")
     destination.write_text(document, encoding="utf-8")
 
     console.print(f"Wrote {destination} ({len(document.encode('utf-8')) // 1024} KB).")

@@ -104,6 +104,8 @@ reported as reproduction, never as causation.
 | `runopsy evidence --step N` | why one step was flagged and how it ranked |
 | `runopsy replay --from-step N` | plan a controlled re-run; `--execute` tests it |
 | `runopsy export [-o FILE]` | a self-contained HTML report |
+| `runopsy export --otlp` | the same run as OpenInference-shaped OTLP JSON |
+| `runopsy prune` | delete traces past the retention window |
 | `runopsy ui` | a local web view, loopback only |
 | `runopsy bench [--compare\|--inject]` | score the engine against labelled traces |
 | `runopsy config --init` | write a commented `runopsy.toml` |
@@ -165,8 +167,10 @@ These are enforced by tests, not by convention:
   and a confirmation, happens in a disposable sandbox rather than your working tree, and
   excludes external and destructive steps outright. Unrecognised tools need approval —
   the gate fails closed.
-- **Observing never breaks the observed.** A runtime hook that cannot record swallows the
-  failure and exits cleanly.
+- **Observing never breaks the observed.** A runtime hook that cannot record reports the
+  reason on stderr and exits cleanly.
+- **Nothing expires on its own.** Retention deletes only when you run `runopsy prune`,
+  only with `--apply`, and never a run whose age it cannot determine.
 
 ## Status
 
@@ -176,6 +180,15 @@ adapter verified against hermes-agent 0.19.0.
 
 All ten sprint items are done, plus replay execution, the semantic layer, fault
 injection, the local API and keyring onboarding.
+
+Traces export to OpenInference-shaped OTLP, so a diagnosed run opens in Phoenix,
+Langfuse or anything else that speaks it — with the localized onset travelling along as
+span attributes. Import is deliberately not attempted: reading somebody else's spans
+means guessing what their attributes mean, and a wrong guess produces a confident
+diagnosis of a trace we misunderstood.
+
+Measured at scale with `runopsy bench --perf`: 100,000 events ingest in about three
+seconds and every stage stays roughly linear.
 
 Not built yet: a React UI beyond the served HTML report, the opt-in real-run corpus
 (section 17.1 layer four), and publication to PyPI.
