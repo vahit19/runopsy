@@ -34,6 +34,9 @@ dev = [
     "coverage>=7.6",
     "mypy>=1.11",
     "ruff>=0.6",
+    "bandit>=1.7",
+    "pip-audit>=2.7",
+    "cyclonedx-bom>=4.4",
 ]
 
 [tool.ruff]
@@ -76,4 +79,33 @@ addopts = "-q --strict-markers --strict-config"
 
 [tool.coverage.run]
 branch = true
-source = ["runopsy_core", "runopsy_collector", "runopsy_cli", "runopsy_bench", "runopsy_replay", "runopsy_adapter"]
+source = [
+    "runopsy_core",
+    "runopsy_collector",
+    "runopsy_cli",
+    "runopsy_bench",
+    "runopsy_replay",
+    "runopsy_adapter",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 85
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = [
+    # The test suite is built on assert.
+    "B101",
+    # Running subprocesses is the shell adapter's entire purpose; the call site
+    # documents that the command comes from the user, not from a model.
+    "B404",
+    "B602",
+    "B603",
+]

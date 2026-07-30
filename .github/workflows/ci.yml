@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Nothing here needs a provider key. If a test ever starts requiring one, it has
+  # broken the promise that core analysis works offline, and CI should be the place
+  # that notices.
+  RUNOPSY_CI: "1"
+
+jobs:
+  quality:
+    name: lint, types and tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # All three, because the shell adapter runs real subprocesses and path
+        # handling differs enough between platforms to have already caused one bug.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Type check
+        run: uv run mypy packages/runopsy-core/src packages/runopsy-collector/src
+             packages/runopsy-cli/src packages/runopsy-bench/src
+             packages/runopsy-replay/src packages/runopsy-adapter/src tests
+
+      - name: Test
+        run: uv run coverage run -m pytest
+
+      - name: Coverage
+        run: uv run coverage report
+
+  benchmark:
+    name: localization benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - name: Score the engine
+        run: uv run runopsy bench --compare
+
+      - name: Report must be current
+        # The report carries no timestamp, so regenerating it produces identical bytes
+        # unless the engine's behaviour actually changed. A diff here means someone
+        # moved the numbers without recording it.
+        run: |
+          uv run runopsy bench --write benchmarks/baseline-report.md
+          git diff --exit-code benchmarks/baseline-report.md
+
+  build:
+    name: packages build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build every package
+        run: |
+          for package in packages/*/; do
+            echo "::group::$package"
+            uv build "$package" --out-dir dist
+            echo "::endgroup::"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+          retention-days: 7

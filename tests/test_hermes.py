@@ -248,9 +248,23 @@ class TestHookCommandNeverBreaksTheRun:
         assert result.exit_code == 0
 
     def test_it_always_prints_a_decision_hermes_can_parse(self, tmp_path: Path) -> None:
+        """Hermes JSON-parses what the hook writes, so the decision must survive a failure.
+
+        The assertion looks for the decision anywhere in the output because the test
+        runner merges stderr into stdout. Hermes captures the two streams separately, so
+        in practice its parser only ever sees this line.
+        """
         result = self._invoke("post_tool_call", "{broken", tmp_path / "store")
 
-        assert json.loads(result.output.strip()) == {}
+        decisions = [line for line in result.output.splitlines() if line.strip() == "{}"]
+        assert decisions, result.output
+        assert json.loads(decisions[0]) == {}
+
+    def test_a_failure_is_reported_rather_than_hidden(self, tmp_path: Path) -> None:
+        """Silent failure leaves a user with no trace and no reason why."""
+        result = self._invoke("post_tool_call", "{broken", tmp_path / "store")
+
+        assert "could not record post_tool_call" in result.output
 
     def test_it_never_blocks_a_tool_call(self, tmp_path: Path) -> None:
         result = self._invoke(

@@ -1,0 +1,147 @@
+# Runopsy
+
+**Find where an AI agent run started going wrong — not just where it stopped.**
+
+When an agent fails, the last error is rarely the problem. A config written wrongly at
+step 9 surfaces as a failing test at step 14, and reading the log bottom-up sends you to
+fix the test. Runopsy records agent runs, localizes the step where things actually broke,
+shows the evidence behind that claim, and plans a controlled replay to test it.
+
+It runs locally, spends no tokens for its core analysis, and never claims a cause it has
+not validated.
+
+```
+Observed failure  (what the run visibly got wrong)
+  step 14 pytest
+  tool 'pytest' failed with exit code 1
+
+Suspected onset  (where it may have started going wrong, unverified)
+  step 9 write_config
+  tool 'write_config' failed with exit code 1
+  47% confidence, unverified
+  may have affected step 10, step 11, step 12 and 2 more
+
+  No cause has been confirmed. To test this candidate, replay from it:
+    runopsy replay run_0042 --from-step 9 --dry-run
+```
+
+## Does it actually work?
+
+Measured on 20 labelled traces with declared ground truth, reproducible offline with
+`runopsy bench --compare`:
+
+| strategy | top-1 | top-3 | mean step distance |
+| --- | ---: | ---: | ---: |
+| no diagnosis | 0.0% | 0.0% | — |
+| blame the last failing step *(what reading a log achieves)* | 22.2% | 44.4% | 3.50 |
+| blame the earliest failing step | 50.0% | 50.0% | 1.31 |
+| **Runopsy deterministic engine** | **94.4%** | **100.0%** | **0.11** |
+
+Zero false positives on healthy runs — a spurious finding is what gets a diagnosis tool
+switched off, so that threshold is exact rather than approximate.
+
+**What this does not show.** These are synthetic single-fault traces. They establish that
+the ranking behaves as designed; they do not establish that it saves anyone time on real
+work. That needs fault injection on real workloads and a measured reduction in
+time-to-diagnosis. The full report, including the cases the engine still misses and the
+failures it cannot see at all, is in [`benchmarks/baseline-report.md`](benchmarks/baseline-report.md).
+
+## Install
+
+Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
+
+```bash
+git clone https://github.com/vahit19/runopsy && cd runopsy
+uv sync
+```
+
+## Try it in one minute
+
+```bash
+uv run python examples/coding_failure/seed.py     # a demo trace
+uv run runopsy diagnose --store .runopsy-demo
+uv run runopsy evidence --step 9 --store .runopsy-demo
+```
+
+## Record your own runs
+
+Wrap any pipeline. Nothing else is needed — no agent framework, no API key:
+
+```bash
+uv run runopsy record -s "make" -s "ruff check ." -s "pytest"
+uv run runopsy diagnose latest
+```
+
+Or connect [Hermes Agent](https://hermes-agent.nousresearch.com/) and diagnose real agent
+sessions:
+
+```bash
+uv run runopsy adapter hermes    # prints the config to paste into cli-config.yaml
+```
+
+## Commands
+
+| command | what it does |
+| --- | --- |
+| `runopsy record -s CMD` | run commands and record them as a trace |
+| `runopsy runs` | list recorded runs |
+| `runopsy diagnose [RUN]` | find the onset, the evidence and the propagation |
+| `runopsy evidence --step N` | why one step was flagged and how it ranked |
+| `runopsy replay --from-step N` | plan a controlled re-run — never executes |
+| `runopsy export [-o FILE]` | a self-contained HTML report |
+| `runopsy bench [--compare]` | score the engine against labelled traces |
+| `runopsy doctor` | what is configured, without revealing any secret |
+| `runopsy adapter hermes` | configuration to connect a runtime |
+
+## How it works
+
+```
+runtime adapter → normalized trace graph → deterministic detectors
+                                        → causal ranking → diagnosis
+                                        → replay planning
+```
+
+Analysis runs in layers. **L0 structural** and **L1 behavioral** — failed calls, timeouts,
+retry storms, argument-identical loops, oscillating state, stale memory, incomplete
+handoffs, budget ceilings — are pure functions of the trace: no model, no network, no
+clock, and therefore no tokens. **L2 graph impact** infers what a step may have broken
+downstream, with confidence decaying by distance. **L3 semantic** and **L4 validation**
+are opt-in and cost money; only they can promote a suspicion to a cause.
+
+## Design commitments
+
+These are enforced by tests, not by convention:
+
+- **Local-first.** Traces stay on your machine. Prompts, arguments and file contents are
+  referenced by hash and never stored, so a trace can be shared without carrying your
+  source code with it.
+- **Deterministic-first.** Core analysis spends zero tokens and works fully offline. No
+  provider key is required for anything in this table.
+- **Calibrated language.** A cause is stated as established only when a counterfactual
+  replay or a person confirms it. Everything else is labelled a suspicion and carries its
+  confidence. No output path asserts causation for an unvalidated finding.
+- **Bring your own key.** No credential is bundled, defaulted, or proxied through any
+  service we operate.
+- **Replay proposes, never acts.** External and destructive steps are excluded from
+  replay outright; unrecognised tools require human approval. The gate fails closed.
+- **Observing never breaks the observed.** A runtime hook that cannot record swallows the
+  failure and exits cleanly.
+
+## Status
+
+The first sprint of the design document is complete: schema, collector, 15 detectors,
+ranking, CLI, replay planning, HTML export, benchmark, and a Hermes adapter verified
+against hermes-agent 0.19.0.
+
+Not built yet: replay execution, the semantic analysis layer, the FastAPI server, the
+React UI, and the fault-injection benchmark layers.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
+
+## Licence
+
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+If you use Runopsy in academic work, please cite it — see [CITATION.cff](CITATION.cff).

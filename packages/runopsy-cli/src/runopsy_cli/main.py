@@ -79,8 +79,11 @@ def hook_command(
             mapped = hermes.map_payload(payload, sequence=collector.store.next_sequence(run))
             if mapped is not None:
                 collector.record(mapped)
-    except Exception:
-        pass
+    except Exception as error:
+        # Reported rather than swallowed. Exiting zero keeps the agent running, but a
+        # recorder that fails silently leaves a user with no trace and no reason why,
+        # which is a worse outcome than the failure it was trying to survive.
+        print(f"runopsy: could not record {event}: {type(error).__name__}", file=sys.stderr)
 
     typer.echo(decision)
 
