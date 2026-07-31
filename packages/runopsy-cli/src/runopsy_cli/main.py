@@ -219,6 +219,11 @@ def hook_command(
     typer.echo(decision)
 
 
+def _is_local_endpoint(url: str) -> bool:
+    """Whether a configured endpoint keeps the request on this machine."""
+    return any(host in url for host in ("localhost", "127.0.0.1", "[::1]"))
+
+
 def _text_or_none(value: object) -> str | None:
     text = str(value).strip() if value is not None else ""
     return text or None
@@ -595,11 +600,20 @@ def diagnose(
         summary = collector.store.run(run_id)
 
         if mode == "hybrid":
-            key = resolve_api_key()
+            # A local endpoint needs no credential, and demanding one would have made
+            # "usable with no key at all" false for the only layer that could spend
+            # money. The placeholder is sent because OpenAI-compatible servers expect
+            # the header to exist, not because anything checks it.
+            local = bool(config.semantic_base_url) and _is_local_endpoint(
+                config.semantic_base_url
+            )
+            key = resolve_api_key() or ("local" if local else None)
             if key is None:
                 errors.print(
                     f"No {API_KEY_VARIABLE} found, so hybrid mode cannot run. "
-                    "Falling back to deterministic analysis, which needs no key.",
+                    "Falling back to deterministic analysis, which needs no key.\n"
+                    "A local model needs no key either: set semantic.base_url in "
+                    f"{CONFIG_FILENAME} to an OpenAI-compatible endpoint.",
                     style="yellow",
                 )
                 bundle = run_diagnosis(context)
@@ -612,7 +626,11 @@ def diagnose(
                 )
                 result = review_diagnosis(
                     context,
-                    OpenRouterClient(key, model=model or config.semantic_model),
+                    OpenRouterClient(
+                        key,
+                        model=model or config.semantic_model,
+                        base_url=config.semantic_base_url,
+                    ),
                     budget=budget,
                     vault=collector.vault if config.vault_enabled else None,
                     cache_dir=collector.paths.root / "semantic-cache",

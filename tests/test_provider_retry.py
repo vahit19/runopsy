@@ -181,3 +181,35 @@ class TestTheOfflinePromiseIsUnaffected:
         dependencies = tomllib.loads(manifest.decode("utf-8"))["project"]["dependencies"]
 
         assert not [name for name in dependencies if "semantic" in name or "httpx" in name]
+
+
+class TestALocalEndpoint:
+    """What makes "local models need no key" true rather than a claim in a README."""
+
+    def test_requests_go_where_they_are_pointed(self) -> None:
+        transport = Flaky(failures=0, error=httpx.ConnectError("unused"))
+        local = "http://localhost:11434/v1/chat/completions"
+
+        OpenRouterClient("local", transport=transport, base_url=local).complete("s", "u")
+
+        assert transport.attempts == 1
+
+    def test_an_empty_setting_still_means_openrouter(self) -> None:
+        from runopsy_semantic.provider import OPENROUTER_URL
+
+        assert OpenRouterClient("k", base_url="").base_url == OPENROUTER_URL
+        assert OpenRouterClient("k").is_local is False
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://localhost:11434/v1/chat/completions",
+            "http://127.0.0.1:8080/v1/chat/completions",
+        ],
+    )
+    def test_a_loopback_endpoint_is_recognised_as_local(self, url: str) -> None:
+        """The check that lets the CLI stop demanding a credential it does not need."""
+        from runopsy_cli.main import _is_local_endpoint
+
+        assert OpenRouterClient("k", base_url=url).is_local
+        assert _is_local_endpoint(url)

@@ -92,11 +92,24 @@ class OpenRouterClient:
         model: str = DEFAULT_MODEL,
         transport: Transport | None = None,
         referer: str = "https://github.com/vahit19/runopsy",
+        base_url: str = "",
     ) -> None:
         self._api_key = api_key
         self.model = model
         self._transport = transport
         self._referer = referer
+        # Any OpenAI-compatible chat-completions endpoint. Empty means OpenRouter.
+        #
+        # This is what makes "local models require no key at all" true rather than a
+        # claim: pointed at Ollama or llama.cpp the semantic layer runs with nothing
+        # leaving the machine, which is the promise the rest of the design already keeps
+        # and this one package could not.
+        self.base_url = base_url.strip() or OPENROUTER_URL
+
+    @property
+    def is_local(self) -> bool:
+        """Whether the configured endpoint keeps the request on this machine."""
+        return any(host in self.base_url for host in ("localhost", "127.0.0.1", "[::1]"))
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -109,9 +122,9 @@ class OpenRouterClient:
 
     def _send(self, body: dict[str, Any]) -> httpx.Response:
         if self._transport is not None:
-            return self._transport.post(OPENROUTER_URL, headers=self._headers(), json=body)
+            return self._transport.post(self.base_url, headers=self._headers(), json=body)
         with httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-            return client.post(OPENROUTER_URL, headers=self._headers(), json=body)
+            return client.post(self.base_url, headers=self._headers(), json=body)
 
     def _post(self, body: dict[str, Any]) -> httpx.Response:
         """One request, tried again only when it never arrived.
