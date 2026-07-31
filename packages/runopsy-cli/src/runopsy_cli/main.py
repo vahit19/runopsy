@@ -101,7 +101,14 @@ def hook_command(
 
         run = hermes.run_id_for(payload)
         with Collector.open(store) as collector:
-            mapped = hermes.map_payload(payload, sequence=collector.store.next_sequence(run))
+            # Same vault the shell adapter fills. Without it a Hermes trace holds hashes
+            # of text that was never stored, so evidence has nothing to show, replay has
+            # nothing to re-run, and --mode hybrid pays a model to read "withheld".
+            mapped = hermes.map_payload(
+                payload,
+                sequence=collector.store.next_sequence(run),
+                vault=collector.vault if _config().vault_enabled else None,
+            )
             if mapped is not None:
                 collector.record(mapped)
     except Exception as error:

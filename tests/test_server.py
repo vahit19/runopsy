@@ -145,6 +145,24 @@ class TestWhatItRefusesToDo:
 
         assert response.status_code == 422
 
+    def test_the_step_may_arrive_as_a_json_body(self, client: TestClient) -> None:
+        """The obvious way to call a POST endpoint.
+
+        It used to accept the step only as a query parameter, so a client sending JSON
+        — which is what a POST invites — got a 422 naming a query field it had not used,
+        and no indication that the body had been ignored.
+        """
+        response = client.post(f"/v1/runs/{RUN}/replay/plan", json={"from_step": 1})
+
+        assert response.status_code == 200, response.text
+        assert response.json()["parent_run_id"] == RUN
+
+    def test_omitting_the_step_entirely_says_where_it_can_go(self, client: TestClient) -> None:
+        response = client.post(f"/v1/runs/{RUN}/replay/plan")
+
+        assert response.status_code == 422
+        assert "body" in response.json()["detail"]
+
 
 class TestIngest:
     def test_events_can_be_recorded_over_http(self, client: TestClient, store: Path) -> None:

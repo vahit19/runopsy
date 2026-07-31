@@ -25,6 +25,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Final
 
+from runopsy_adapter.recorder import PayloadStore
 from runopsy_adapter.secrets import scan
 from runopsy_core.hashing import hash_text
 from runopsy_core.schema import (
@@ -120,13 +121,39 @@ def _flagged(*texts: str | None) -> SecurityMetadata:
     return SecurityMetadata(redacted=bool(found), contains_secret=bool(found))
 
 
+def _preserve(vault: PayloadStore | None, *texts: str | None) -> None:
+    """Keep payload text in the local vault, redacted, so later layers can read it.
+
+    The trace itself keeps hashes and nothing else. Without this the hashes refer to
+    text that was never stored anywhere, and every layer that needs to *read* a step
+    degrades to nothing: ``--mode hybrid`` sent a model twenty steps whose command and
+    output were both withheld as "not in the local store", and paid for the privilege.
+
+    Redaction happens first and the redacted form is what lands on disk. The vault is
+    local, but a secret written anywhere outlives the scan that found it.
+    """
+    if vault is None:
+        return
+    for text in texts:
+        if text:
+            found = scan(text)
+            vault.put(text, stored_text=found.redacted if found.found else None)
+
+
 def map_payload(
-    payload: dict[str, Any], *, sequence: int, timestamp: datetime | None = None
+    payload: dict[str, Any],
+    *,
+    sequence: int,
+    timestamp: datetime | None = None,
+    vault: PayloadStore | None = None,
 ) -> Event | None:
     """Translate one Hermes hook payload into a Runopsy event.
 
     Returns ``None`` for events Runopsy does not record, so an unfamiliar hook is
     ignored rather than turned into a fabricated step.
+
+    When a ``vault`` is given, command and output text are preserved locally alongside
+    the hashes that go into the trace.
     """
     event_name = str(payload.get("hook_event_name") or "")
     if event_name not in RECORDED_EVENTS and event_name not in PLUGIN_ONLY_EVENTS:
@@ -174,6 +201,7 @@ def map_payload(
         output = _text(extra.get("result"))
         error_type = _text(extra.get("error_type"))
         status = _STATUS.get(str(extra.get("status") or "ok"), CallStatus.OK)
+        _preserve(vault, arguments, output)
         return ToolCallEvent(
             **common,
             parent_id=_identifier(extra.get("turn_id"), "") or None,

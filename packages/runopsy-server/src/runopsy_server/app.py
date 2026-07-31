@@ -45,6 +45,12 @@ class IngestResult(BaseModel):
     duplicates: int
 
 
+class ReplayPlanRequest(BaseModel):
+    """The body of a replay-plan request."""
+
+    from_step: int = Field(..., ge=0, description="Step to replay from.")
+
+
 class RunSummaryOut(BaseModel):
     run_id: str
     task: str
@@ -178,7 +184,8 @@ def create_app(store: Path | None = None) -> FastAPI:
     @api.post("/v1/runs/{run_id}/replay/plan")
     def post_replay_plan(
         run_id: str,
-        from_step: int = Query(..., ge=0, description="Step to replay from."),
+        body: ReplayPlanRequest | None = None,
+        from_step: int | None = Query(None, ge=0, description="Step to replay from."),
         collector: Collector = Depends(store_dep),
     ) -> dict[str, Any]:
         """Produce a plan. Execution is deliberately not exposed over HTTP.
@@ -186,11 +193,21 @@ def create_app(store: Path | None = None) -> FastAPI:
         A replay is the only thing here that can change the world, and that decision
         belongs to a person reading the plan in a terminal, not to whatever can reach
         this port.
+
+        The step may arrive in a JSON body or as a query parameter. It was query-only,
+        which meant the obvious request — a POST carrying JSON — was answered with a 422
+        naming a query field, and left the caller to guess why the body was ignored.
         """
+        step = body.from_step if body is not None else from_step
+        if step is None:
+            raise HTTPException(
+                status_code=422,
+                detail="from_step is required, either in the JSON body or as a query parameter",
+            )
         context, _ = _analyse(collector, run_id)
-        if not any(node.sequence == from_step for node in context.graph.nodes):
-            raise HTTPException(status_code=404, detail=f"run {run_id} has no step {from_step}")
-        return build_plan(context, from_step).model_dump(mode="json")
+        if not any(node.sequence == step for node in context.graph.nodes):
+            raise HTTPException(status_code=404, detail=f"run {run_id} has no step {step}")
+        return build_plan(context, step).model_dump(mode="json")
 
     @api.get("/v1/runs/{run_id}/report", response_class=HTMLResponse)
     def get_report(run_id: str, collector: Collector = Depends(store_dep)) -> HTMLResponse:

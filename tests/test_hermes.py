@@ -23,6 +23,7 @@ from runopsy_adapter.hermes import RECORDED_EVENTS, hooks_config_block, map_payl
 from runopsy_cli.main import app
 from runopsy_collector import Collector
 from runopsy_core import AnalysisContext, diagnose
+from runopsy_core.hashing import hash_text
 from runopsy_core.schema import (
     CallStatus,
     HandoffEvent,
@@ -352,3 +353,66 @@ class TestEndToEndSession:
 def test_every_registered_event_maps_to_something(event: str) -> None:
     """A hook we ask Hermes to call must produce an event, or we are wasting its time."""
     assert mapped(event, extra={"child_session_id": "c", "model": "m"}) is not None
+
+
+class TestPayloadsReachTheVault:
+    """The trace stores hashes; the text has to be kept somewhere or it is lost.
+
+    It was lost. The Hermes mapper hashed the command and the output and dropped both,
+    so every layer that needs to *read* a step degraded silently: `--mode hybrid` on a
+    real 42-event session withheld all twenty steps as "not in the local store" and
+    charged for the model call anyway.
+    """
+
+    class Vault:
+        def __init__(self) -> None:
+            self.stored: dict[str, str] = {}
+
+        def put(self, original_text: str, *, stored_text: str | None = None) -> str:
+            digest = hash_text(original_text)
+            self.stored[digest] = original_text if stored_text is None else stored_text
+            return digest
+
+    def call(self, vault: Vault | None, *, result: str = "3 passed") -> Any:
+        return map_payload(
+            payload(
+                "post_tool_call",
+                tool_name="terminal",
+                args="pytest -q",
+                extra={"result": result, "status": "ok", "duration_ms": 12},
+            ),
+            sequence=1,
+            timestamp=NOW,
+            vault=vault,
+        )
+
+    def test_the_command_and_output_are_preserved(self) -> None:
+        vault = self.Vault()
+
+        event = self.call(vault)
+
+        assert vault.stored[str(event.tool.arguments_hash)] == "pytest -q"
+        assert vault.stored[str(event.tool.output_hash)] == "3 passed"
+
+    def test_the_hash_in_the_trace_is_of_the_original_text(self) -> None:
+        """A digest that does not match what was hashed cannot be looked up."""
+        vault = self.Vault()
+
+        event = self.call(vault)
+
+        assert event.tool.arguments_hash == hash_text("pytest -q")
+
+    def test_a_secret_is_redacted_before_it_lands_on_disk(self) -> None:
+        """The vault is local, but a secret written anywhere outlives the scan."""
+        vault = self.Vault()
+        secret = "export TOKEN=" + "ghp_" + "b" * 36
+
+        event = self.call(vault, result=secret)
+
+        assert "ghp_" not in vault.stored[str(event.tool.output_hash)]
+
+    def test_without_a_vault_nothing_is_stored_and_nothing_breaks(self) -> None:
+        """Recording must still work when the vault is switched off in config."""
+        event = self.call(None)
+
+        assert event.tool.arguments_hash == hash_text("pytest -q")
