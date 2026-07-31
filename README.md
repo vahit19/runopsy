@@ -93,8 +93,14 @@ Or connect [Hermes Agent](https://hermes-agent.nousresearch.com/) and diagnose r
 sessions:
 
 ```bash
-uv run runopsy adapter hermes    # prints the config to paste into cli-config.yaml
+uv run runopsy adapter hermes           # prints the config to paste into its cli-config.yaml
+uv run runopsy adapter hermes status    # check it took
+uv run runopsy run "make the failing test pass"
 ```
+
+That last command starts the agent, records what it does through the hooks, and
+diagnoses the result. It drives the runtime through its own command line — nothing is
+forked, imported or patched — and tells you plainly if the session recorded nothing.
 
 ## Prove it, don't just rank it
 
@@ -114,6 +120,7 @@ reported as reproduction, never as causation.
 
 | command | what it does |
 | --- | --- |
+| `runopsy run "TASK"` | drive an agent and diagnose the run, in one command |
 | `runopsy record -s CMD` | run commands and record them as a trace |
 | `runopsy runs` | list recorded runs |
 | `runopsy diagnose [RUN]` | find the onset, the evidence and the propagation |

@@ -12,7 +12,7 @@ The ten-item first sprint from section 24 of the design document is complete. Th
 
 Replay execution runs a counterfactual experiment in a sandbox copy; a supporting result upgrades a candidate to `replay_supported`, including creating one at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
 
-**Not built yet:** `runopsy run` (needs the runtime adapter driving the agent, not just wrapping a pipeline) · the optional 3D view, which the design puts last and behind the 2D one · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
+**Not built yet:** the optional 3D view, which the design puts last and behind the 2D one · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
 
 **The web UI.** `cd packages/runopsy-ui && npm install && npm run build` writes into `runopsy-server/src/runopsy_server/static/`, which the server mounts at `/` when present. The build output is **not** in version control: it is produced at release time and bundled into the wheel, so `pip install` gives a working view without a Node toolchain, while a source checkout that never ran the build falls back to the server-rendered index. That fallback is deliberate and worth keeping — a diagnosis tool that shows nothing without a JavaScript build has made itself hardest to reach exactly when it is needed. `create_app(store, serve_ui=False)` forces the fallback, and the tests use it.
 
@@ -243,6 +243,7 @@ analysis: { mode: deterministic, llm_on: suspicious, max_diagnostic_calls: 2,
 Implemented:
 
 ```bash
+runopsy run "TASK"                                       # drive an agent, then diagnose it
 runopsy record -s CMD ...                                # wrap any pipeline
 runopsy runs
 runopsy diagnose [RUN|latest] [--json] [--fail-on-finding] [--mode hybrid] [--budget-usd U]
@@ -261,7 +262,7 @@ runopsy adapter hermes [config|status]                   # paste, or check it to
 runopsy hook                                             # called by Hermes, not by hand
 ```
 
-Still to come, per the design document: `run` — `record` wraps a pipeline, but a true `run` needs the runtime adapter driving the agent itself.
+`runopsy run` drives the runtime through its own documented command line — no Hermes module is imported, nothing is patched, and the store is passed through `RUNOPSY_HOME` rather than by rewriting the user config. It checks afterwards whether anything was actually recorded, because "the agent finished and the trace is empty" is a real state that otherwise looks like success.
 
 Conventions worth preserving when adding commands: every command that reads or writes recorded runs takes `--store` (`setup`, `bench` and `config` do not, and should not — they touch the keyring, the synthetic corpus and `runopsy.toml` respectively); `latest` resolves to the most recently started run; findings never fail the command unless CI opts in; anything that could leak is redacted by default.
 

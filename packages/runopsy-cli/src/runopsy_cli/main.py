@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +15,7 @@ from rich.console import Console
 from rich.table import Table
 
 from runopsy_adapter import hermes, record_steps
+from runopsy_adapter import launch as launcher
 from runopsy_bench import compare_strategies, comparison_markdown, run_benchmark
 from runopsy_cli import render
 from runopsy_cli.config import CONFIG_FILENAME, RunopsyConfig, example_config, load_config
@@ -47,6 +50,28 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+
+def _tolerate_narrow_encodings() -> None:
+    """Never let a console code page turn a diagnosis into a crash.
+
+    On Windows a terminal running a legacy code page cannot encode the punctuation this
+    output uses, and the failure is a traceback rather than a mangled character. It came
+    up twice: ``runopsy graph`` died on a box-drawing character, and ``runopsy run``
+    recorded forty-six events and then crashed printing the em dash in its summary — the
+    work done, the answer lost.
+
+    Replacing unencodable characters costs a nicer dash. Refusing to print costs the
+    entire reason the command was run.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            with contextlib.suppress(OSError, ValueError):  # stream may be detached
+                reconfigure(errors="replace")
+
+
+_tolerate_narrow_encodings()
 
 console = Console()
 errors = Console(stderr=True)
@@ -474,6 +499,103 @@ def evidence(
             include_sensitive=include_sensitive,
         )
     )
+
+
+@app.command()
+def run(
+    task: Annotated[str, typer.Argument(help="What the agent should do.")],
+    store: StoreOption = None,
+    model: Annotated[
+        str | None, typer.Option("--model", help="Model to pass to the runtime.")
+    ] = None,
+    provider: Annotated[
+        str | None, typer.Option("--provider", help="Provider to pass to the runtime.")
+    ] = None,
+    runtime: Annotated[str, typer.Option("--runtime", help="Only 'hermes' today.")] = "hermes",
+    timeout: Annotated[
+        float | None, typer.Option("--timeout", help="Seconds before giving up on the agent.")
+    ] = None,
+    diagnose_after: Annotated[
+        bool, typer.Option("--diagnose/--no-diagnose", help="Diagnose the run when it finishes.")
+    ] = True,
+) -> None:
+    """Run an agent task and diagnose it, in one command.
+
+    This drives the runtime through its documented command line and nothing else — no
+    Hermes module is imported, nothing is monkey-patched, and the user's hook config is
+    read rather than rewritten. The store is passed through the environment, so the
+    hooks they already approved write where this command is looking.
+
+    The difference from ``record`` is worth keeping in mind: ``record`` runs the steps
+    itself and therefore knows every one of them. Here the agent decides its own steps
+    and Runopsy learns what happened only through hooks, which is the real case — and
+    the case where recording can fail silently. So this checks afterwards, and says so
+    when nothing arrived.
+    """
+    if runtime != "hermes":
+        errors.print(f"No launcher for {runtime!r}. Supported: hermes.", style="red")
+        raise typer.Exit(code=2)
+
+    executable = launcher.find_executable()
+    if executable is None:
+        errors.print(
+            "No 'hermes' executable on PATH.\n"
+            "Install it with: uv tool install hermes-agent\n"
+            "Then: runopsy adapter hermes    (and paste the block it prints)",
+            style="red",
+        )
+        raise typer.Exit(code=2)
+
+    status = hermes.adapter_status()
+    if not status.is_wired:
+        # Warned rather than refused. The person may have configured hooks somewhere this
+        # cannot see, and a diagnosis tool that will not let you run your own agent has
+        # overstepped. But letting it proceed silently is how you end up with a session
+        # that looks fine and recorded nothing.
+        console.print(
+            "Warning: Hermes does not appear to be wired to Runopsy, so this run may "
+            "record nothing.\n  Check with: runopsy adapter hermes status",
+            style="yellow",
+        )
+
+    with Collector.open(store) as collector:
+        before = {run.run_id for run in collector.runs()}
+        target = collector.paths.root
+
+    console.print(f"Running {task!r} with {Path(executable).name}...", style="dim")
+    try:
+        result = launcher.launch(
+            task,
+            store=target,
+            executable=executable,
+            model=model,
+            provider=provider,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        errors.print(f"The agent did not finish within {timeout}s.", style="red")
+        raise typer.Exit(code=1) from None
+
+    with Collector.open(store) as collector:
+        fresh = [run for run in collector.runs() if run.run_id not in before]
+
+    if not fresh:
+        errors.print(
+            "The agent finished but nothing was recorded.\n"
+            "  runopsy adapter hermes status    # is the runtime wired?",
+            style="red",
+        )
+        raise typer.Exit(code=1)
+
+    newest = fresh[0]
+    console.print(f"Recorded {newest.run_id} — {newest.event_count} events.", style="dim")
+
+    if result.exit_code != 0:
+        console.print(f"The agent exited with code {result.exit_code}.", style="yellow")
+
+    if diagnose_after:
+        console.print("")
+        diagnose(run=newest.run_id, store=store)
 
 
 @app.command()
