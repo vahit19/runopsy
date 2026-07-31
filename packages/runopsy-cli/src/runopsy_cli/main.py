@@ -661,6 +661,75 @@ def run(
         diagnose(run=newest.run_id, store=store)
 
 
+@app.command(name="demo")
+def demo_command(
+    store: StoreOption = None,
+    keep: Annotated[
+        bool, typer.Option("--keep", help="Leave the demo run in the store afterwards.")
+    ] = False,
+) -> None:
+    """See what Runopsy does, in one command. No setup, no agent, no key.
+
+    This is the first thing to run after installing. It records a worked example — an
+    agent asked to fix a failing test, which breaks its environment on the way — and
+    then diagnoses it, narrating what each part of the output means.
+
+    The trace ships inside the package rather than living in the repository, because a
+    demo that needs a git clone is no use to somebody who just ran `pip install`.
+    """
+    from runopsy_cli import demo as worked
+
+    target = store or Path(".runopsy-demo")
+    console.print("[bold]A worked example[/bold]\n", style="")
+    console.print(
+        "An agent was asked to fix a failing integration test. Fourteen steps later\n"
+        "the test still failed. Here is what Runopsy makes of it.\n",
+        style="dim",
+    )
+
+    with Collector.open(target) as collector:
+        events = worked.trace()
+        recorded = collector.record_all(events)
+        context = AnalysisContext.from_events(worked.RUN_ID, collector.events(worked.RUN_ID))
+        bundle = run_diagnosis(context)
+        summary = collector.store.run(worked.RUN_ID)
+
+    console.print(f"Recorded {recorded} events into {target}.\n", style="dim")
+    console.print(render.diagnosis(bundle, context.graph, summary))
+
+    console.print("\n[bold]What just happened[/bold]")
+    console.print(
+        f"  The run *visibly* failed at step {worked.SYMPTOM_STEP}, where the tests ran.\n"
+        f"  Reading the log bottom-up sends you there, and the tests are fine.\n\n"
+        f"  Runopsy points at step {worked.ONSET_STEP} instead: a config write that failed\n"
+        "  five steps earlier, leaving the service pointed at the wrong environment.\n"
+        "  Everything after it was doomed and none of it looked wrong.\n\n"
+        "  Note what it does *not* say. It calls that a suspicion, not a cause, and\n"
+        "  gives you the command that would settle it by experiment.",
+        style="dim",
+    )
+    console.print("\n[bold]Try next[/bold]")
+    console.print(
+        f"  runopsy evidence --step {worked.ONSET_STEP} --store {target}"
+        "     what that step actually recorded\n"
+        f"  runopsy graph --store {target}"
+        "                    the whole run as a timeline\n"
+        f"  runopsy ui --store {target}"
+        "                       the same thing in a browser\n\n"
+        "  Then on your own work:\n"
+        '  runopsy record -s "make" -s "pytest"'
+        "          wrap any commands you already run",
+        style="cyan",
+    )
+
+    if not keep:
+        console.print(
+            f"\n(The demo run stays in {target} — delete that folder, or pass --keep to "
+            "keep it deliberately.)",
+            style="dim",
+        )
+
+
 @app.command()
 def label(
     run: RunArgument = LATEST,

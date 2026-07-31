@@ -157,19 +157,22 @@ pip install "runopsy[inspect]"   # read Inspect AI eval logs
 
 Working on Runopsy itself? Clone it and `uv sync`; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Try it in one minute
+## Try it in ten seconds
 
 ```bash
-uvx runopsy record -s "echo building" -s "exit 1" -s "echo deploying"
-uvx runopsy diagnose latest
+runopsy demo
 ```
 
-Or seed the worked example from the design document:
+That is the whole first run. It records a worked example — an agent asked to fix a
+failing test, which breaks its environment on the way — diagnoses it, and explains what
+each part of the answer means. No repository, no agent, no key, no configuration. The
+trace ships inside the package.
+
+Then on something of your own:
 
 ```bash
-uv run python examples/coding_failure/seed.py     # a demo trace
-uv run runopsy diagnose --store .runopsy-demo
-uv run runopsy evidence --step 9 --store .runopsy-demo
+runopsy record -s "make" -s "pytest"    # wrap commands you already run
+runopsy diagnose latest
 ```
 
 ## Record your own runs
@@ -212,6 +215,7 @@ reported as reproduction, never as causation.
 
 | command | what it does |
 | --- | --- |
+| `runopsy demo` | see what it does, on a worked example - start here |
 | `runopsy run "TASK"` | drive an agent and diagnose the run, in one command |
 | `runopsy record -s CMD` | run commands and record them as a trace |
 | `runopsy runs` | list recorded runs |

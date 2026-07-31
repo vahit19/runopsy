@@ -350,3 +350,63 @@ class TestTheWelcomeScreen:
 
         assert "hook" not in result.output
         assert "diagnose" in result.output
+
+
+class TestTheDemoAFirstTimeUserRuns:
+    """`runopsy demo` — the answer to "what does this do?" on a fresh install.
+
+    The README used to point at `examples/coding_failure/seed.py`, which works if you
+    cloned the repository and does nothing at all if you ran `pip install runopsy`,
+    because `examples/` is in no wheel. A first-time user had no way to see the tool
+    work without first understanding it well enough to point it at their own pipeline.
+    """
+
+    def test_it_runs_with_no_setup_at_all(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["demo", "--store", str(tmp_path / "demo")])
+
+        assert result.exit_code == 0, result.output
+
+    def test_it_ships_inside_the_package_rather_than_the_repository(self) -> None:
+        """The whole point: it must work from a wheel, with no source tree present."""
+        from runopsy_cli import demo
+
+        assert len(demo.trace()) > 10
+        assert Path(demo.__file__).parent.name == "runopsy_cli"
+
+    def test_it_finds_the_onset_before_the_visible_failure(self, tmp_path: Path) -> None:
+        from runopsy_cli import demo
+
+        result = runner.invoke(app, ["demo", "--store", str(tmp_path / "demo")])
+
+        assert demo.ONSET_STEP < demo.SYMPTOM_STEP
+        assert f"step {demo.ONSET_STEP}" in result.output
+        assert f"step {demo.SYMPTOM_STEP}" in result.output
+
+    def test_it_explains_the_answer_rather_than_only_printing_it(self, tmp_path: Path) -> None:
+        """A first-time reader has no idea what "suspected onset" is worth."""
+        result = runner.invoke(app, ["demo", "--store", str(tmp_path / "demo")])
+
+        assert "What just happened" in result.output
+        assert "suspicion, not a cause" in result.output
+
+    def test_it_says_what_to_try_next(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["demo", "--store", str(tmp_path / "demo")])
+
+        assert "runopsy evidence" in result.output
+        assert "runopsy record" in result.output
+
+    def test_the_demo_trace_is_a_constant(self, tmp_path: Path) -> None:
+        """Diagnosing it twice must give the same answer, or the documentation rots."""
+        from runopsy_cli import demo
+
+        first, second = demo.trace(), demo.trace()
+
+        assert [e.event_id for e in first] == [e.event_id for e in second]
+        assert [e.timestamp for e in first] == [e.timestamp for e in second]
+
+    def test_a_first_run_is_pointed_at_the_demo(self, tmp_path: Path) -> None:
+        """With nothing recorded, `record` asks someone to already believe the tool is
+        worth pointing at their work. `demo` asks for nothing."""
+        result = runner.invoke(app, ["--store", str(tmp_path)])
+
+        assert "runopsy demo" in result.output

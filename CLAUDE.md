@@ -251,6 +251,7 @@ analysis: { mode: deterministic, llm_on: suspicious, max_diagnostic_calls: 2,
 Implemented:
 
 ```bash
+runopsy demo                                             # the worked example, no setup
 runopsy run "TASK"                                       # drive an agent, then diagnose it
 runopsy record -s CMD ...                                # wrap any pipeline
 runopsy runs

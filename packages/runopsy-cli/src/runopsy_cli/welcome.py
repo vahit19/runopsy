@@ -92,7 +92,12 @@ def _next_steps(situation: Situation) -> Text:
         steps.append(f"{gloss}\n", style="dim")
 
     if situation.run_count == 0:
-        step('runopsy record -s "make" -s "pytest"', "wrap a pipeline you already have")
+        # First run, and the only honest answer to "what does this do?" is to show
+        # them. `record` asks somebody to already have a pipeline in mind and to
+        # believe the tool is worth pointing at it; `demo` asks for nothing.
+        step("runopsy demo", "see what this does, on a worked example")
+        steps.append("\n    then, on your own work:\n", style="dim")
+        step('runopsy record -s "make" -s "pytest"', "wrap commands you already run")
         if situation.runtime_wired:
             step('runopsy run "fix the failing test"', "drive an agent and diagnose it")
         else:
