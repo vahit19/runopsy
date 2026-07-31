@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -72,6 +73,56 @@ class TestEveryPackageIsWiredIn:
         manifest = (ROOT / "packages" / package / "pyproject.toml").read_text(encoding="utf-8")
 
         assert any(line.startswith("version = ") for line in manifest.splitlines())
+
+
+class TestWhatAPublishedWheelWillSay:
+    """Metadata every distribution needs on an index, checked from the manifest.
+
+    None of it affects a source checkout, which is exactly why it rots unnoticed: the
+    first time anyone sees a package with no licence classifier, no repository link and
+    no Python versions is after it is published, and a version number cannot be reused.
+    """
+
+    def manifest(self, package: str) -> dict[str, Any]:
+        path = ROOT / "packages" / package / "pyproject.toml"
+        project: dict[str, Any] = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
+        return project
+
+    @pytest.mark.parametrize("package", PACKAGES)
+    def test_it_declares_its_licence_and_python_versions(self, package: str) -> None:
+        project = self.manifest(package)
+        classifiers = project.get("classifiers") or []
+
+        assert project["license"] == "Apache-2.0"
+        assert any("Apache Software License" in item for item in classifiers)
+        assert any("Python :: 3.12" in item for item in classifiers)
+
+    @pytest.mark.parametrize("package", PACKAGES)
+    def test_it_points_back_at_the_repository(self, package: str) -> None:
+        """A package on an index with no link home is one nobody can report a bug against."""
+        urls = self.manifest(package).get("urls") or {}
+
+        assert {"Homepage", "Repository", "Issues"} <= set(urls)
+
+    @pytest.mark.parametrize("package", PACKAGES)
+    def test_it_is_findable_and_described(self, package: str) -> None:
+        project = self.manifest(package)
+
+        assert project.get("keywords")
+        assert len(str(project.get("description", ""))) > 20
+        assert (ROOT / "packages" / package / "README.md").is_file()
+
+    @pytest.mark.parametrize("package", PACKAGES)
+    def test_claiming_to_be_typed_means_shipping_the_marker(self, package: str) -> None:
+        """`Typing :: Typed` without py.typed makes every downstream mypy run silently
+        treat this package as untyped — a promise that fails quietly."""
+        project = self.manifest(package)
+        if not any("Typing :: Typed" in item for item in project.get("classifiers") or []):
+            pytest.skip(f"{package} does not claim to be typed")
+
+        markers = list((ROOT / "packages" / package / "src").rglob("py.typed"))
+
+        assert markers, f"{package} claims Typing :: Typed but ships no py.typed"
 
 
 class TestTheGatesCannotBeSkippedByAccident:

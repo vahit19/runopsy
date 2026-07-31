@@ -232,6 +232,25 @@ releases bundle it into the wheel, and a source checkout that skips the build ge
 plain server-rendered index instead. A diagnosis tool should not go dark because nobody
 ran a JavaScript build.
 
+## Documentation
+
+- [Reading a diagnosis](docs/reading-a-diagnosis.md) — what each status claims and what
+  it cost to earn
+- [What leaves your machine](docs/privacy.md) — hashes versus content, the vault, and
+  the one command that makes a network call
+- [When it does not work](docs/troubleshooting.md) — the silent failures, in the form
+  they first appeared
+
+## More examples
+
+```bash
+uv run python examples/multi_agent_handoff/seed.py   # a subagent that returned nothing
+uv run python examples/research_failure/seed.py      # a claim that outran its evidence
+```
+
+Both end in a diagnosis that points earlier than the visible symptom — and in the second
+the run reports success, which is the hardest case to surface.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).

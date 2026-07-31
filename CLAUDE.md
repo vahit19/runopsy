@@ -68,6 +68,8 @@ uv run mypy packages/runopsy-core/src packages/runopsy-collector/src \
             packages/runopsy-inspect/src tests
 uv run bandit -c pyproject.toml -r packages -q   # exits non-zero on any finding
 uv run python examples/coding_failure/seed.py   # seed the demo trace
+uv run python examples/multi_agent_handoff/seed.py   # a handoff that dropped the brief
+uv run python examples/research_failure/seed.py      # a claim outrunning its evidence
 uv run runopsy diagnose --store .runopsy-demo
 uv run runopsy bench --write benchmarks/baseline-report.md
 ```

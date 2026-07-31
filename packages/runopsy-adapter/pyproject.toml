@@ -6,11 +6,31 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 authors = [{ name = "Vahit Feryad", email = "vahit.feryat@gmail.com" }]
+keywords = ["agent", "hermes", "tracing", "adapter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+]
 dependencies = [
     "runopsy-core",
     # Reading Hermes' own config to report whether it is wired to us.
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/vahit19/runopsy"
+Repository = "https://github.com/vahit19/runopsy"
+Issues = "https://github.com/vahit19/runopsy/issues"
+Changelog = "https://github.com/vahit19/runopsy/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]
