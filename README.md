@@ -124,6 +124,7 @@ reported as reproduction, never as causation.
 | `runopsy export --otlp` | the same run as OpenInference-shaped OTLP JSON |
 | `runopsy graph` | the run as a timeline; `--format dot` for Graphviz |
 | `runopsy adapter hermes status` | check the runtime is really wired and recording |
+| `runopsy-inspect import LOG` | read an Inspect AI eval log into a trace |
 | `runopsy prune` | delete traces past the retention window |
 | `runopsy ui` | the React timeline and failure map, loopback only |
 | `runopsy bench [--compare\|--inject]` | score the engine against labelled traces |

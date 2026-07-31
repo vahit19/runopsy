@@ -8,11 +8,11 @@ The ten-item first sprint from section 24 of the design document is complete. Th
 
 `runopsy-proje-tasarim-belgesi.pdf` — the 39-page Turkish design document (v0.2, 30 July 2026) — remains the single source of truth. For anything this file does not cover, read the PDF rather than inventing an approach.
 
-**Shipped**, nine packages: `runopsy-core` (schema, normalizer, 15 detectors, impact, ranking, diagnosis, structured logging, OpenInference/OTLP export) · `runopsy-collector` (JSONL journals, DuckDB index, payload vault, retention) · `runopsy-cli` (14 commands, see *Interfaces*) · `runopsy-replay` (planning **and** counterfactual execution behind a fail-closed side-effect gate) · `runopsy-bench` (20 labelled cases, metrics, baselines, fault injection, performance) · `runopsy-adapter` (shell + Hermes, verified against hermes-agent 0.19.0) · `runopsy-semantic` (L3, budget-capped, opt-in) · `runopsy-server` (FastAPI, loopback, serves the built web view) · `runopsy-ui` (React + TypeScript + Vite + XYFlow, the 2D timeline and failure map).
+**Shipped**, ten packages: `runopsy-core` (schema, normalizer, 15 detectors, impact, ranking, diagnosis, structured logging, OpenInference/OTLP export) · `runopsy-collector` (JSONL journals, DuckDB index, payload vault, retention) · `runopsy-cli` (14 commands, see *Interfaces*) · `runopsy-replay` (planning **and** counterfactual execution behind a fail-closed side-effect gate) · `runopsy-bench` (20 labelled cases, metrics, baselines, fault injection, performance) · `runopsy-adapter` (shell + Hermes, verified against hermes-agent 0.19.0) · `runopsy-semantic` (L3, budget-capped, opt-in) · `runopsy-server` (FastAPI, loopback, serves the built web view) · `runopsy-ui` (React + TypeScript + Vite + XYFlow, the 2D timeline and failure map) · `runopsy-inspect` (reads Inspect AI eval logs into traces).
 
 Replay execution runs a counterfactual experiment in a sandbox copy; a supporting result upgrades a candidate to `replay_supported`, including creating one at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
 
-**Not built yet:** `runopsy run` (needs the runtime adapter driving the agent, not just wrapping a pipeline) · the optional 3D view, which the design puts last and behind the 2D one · `packages/runopsy-inspect` (Inspect AI harness) · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
+**Not built yet:** `runopsy run` (needs the runtime adapter driving the agent, not just wrapping a pipeline) · the optional 3D view, which the design puts last and behind the 2D one · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
 
 **The web UI.** `cd packages/runopsy-ui && npm install && npm run build` writes into `runopsy-server/src/runopsy_server/static/`, which the server mounts at `/` when present. The build output is **not** in version control: it is produced at release time and bundled into the wheel, so `pip install` gives a working view without a Node toolchain, while a source checkout that never ran the build falls back to the server-rendered index. That fallback is deliberate and worth keeping — a diagnosis tool that shows nothing without a JavaScript build has made itself hardest to reach exactly when it is needed. `create_app(store, serve_ui=False)` forces the fallback, and the tests use it.
 
@@ -62,7 +62,8 @@ uv run ruff check . && uv run ruff format .
 uv run mypy packages/runopsy-core/src packages/runopsy-collector/src \
             packages/runopsy-cli/src packages/runopsy-bench/src \
             packages/runopsy-replay/src packages/runopsy-adapter/src \
-            packages/runopsy-semantic/src packages/runopsy-server/src tests
+            packages/runopsy-semantic/src packages/runopsy-server/src \
+            packages/runopsy-inspect/src tests
 uv run bandit -c pyproject.toml -r packages -q   # exits non-zero on any finding
 uv run python examples/coding_failure/seed.py   # seed the demo trace
 uv run runopsy diagnose --store .runopsy-demo
