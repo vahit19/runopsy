@@ -9,8 +9,12 @@
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 
 ```bash
-uv tool install runopsy && runopsy
+uv tool install runopsy && runopsy demo
 ```
+
+> **0.1.0 is mid-publish.** `runopsy-core` and `runopsy-collector` are on PyPI and
+> usable as a library today; the CLI distributions land as the remaining trusted
+> publishers are registered. Until then, clone and `uv sync`.
 
 When an agent fails, the last error is rarely the problem. A config written wrongly at
 step 9 surfaces as a failing test at step 14, and reading the log bottom-up sends you to

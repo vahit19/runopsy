@@ -63,6 +63,28 @@ configuration has already been registered for a different project name"*.
 Owner is your GitHub account, Repository name is `runopsy`, and Workflow name is
 `release.yml` on every one of them.
 
+### Where this release stands
+
+`runopsy`, `runopsy-core` and `runopsy-collector` are published. **`pip install runopsy`
+does not work yet**, and will not until its dependency closure is on the index:
+
+| round | register these three | environment names |
+| --- | --- | --- |
+| 2 | `runopsy-cli`, `runopsy-server`, `runopsy-adapter` | `pypi-<name>` |
+| 3 | `runopsy-replay`, `runopsy-semantic`, `runopsy-bench` | `pypi-<name>` |
+| 4 | `runopsy-inspect` | `pypi-runopsy-inspect` |
+
+**Round 3 is the finish line.** `runopsy-inspect` is an optional extra that nothing
+depends on, so `pip install runopsy` starts working the moment round 3 lands. Round 4
+only enables `pip install "runopsy[inspect]"`.
+
+After each round: Actions → Release → the `v0.1.0` run → *Re-run failed jobs*.
+
+Publishing a meta-package before its dependencies is what left the headline install
+command broken between rounds. Claiming the name first was still right — PyPI states
+that registering a pending publisher does not reserve it — but the gap is real while it
+lasts, and a future release should publish leaves first and the meta-package last.
+
 ### Three at a time
 
 A fresh PyPI account may hold only **three pending publishers at once** — adding a
