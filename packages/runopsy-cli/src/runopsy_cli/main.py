@@ -171,17 +171,30 @@ def hook_command(
         payload.setdefault("hook_event_name", event)
 
         run = hermes.run_id_for(payload)
-        with Collector.open(store) as collector:
-            # Same vault the shell adapter fills. Without it a Hermes trace holds hashes
-            # of text that was never stored, so evidence has nothing to show, replay has
-            # nothing to re-run, and --mode hybrid pays a model to read "withheld".
-            mapped = hermes.map_payload(
-                payload,
-                sequence=collector.store.next_sequence(run),
-                vault=collector.vault if _config().vault_enabled else None,
-            )
-            if mapped is not None:
-                collector.record(mapped)
+        try:
+            with Collector.open(store) as collector:
+                # Same vault the shell adapter fills. Without it a Hermes trace holds
+                # hashes of text that was never stored, so evidence has nothing to show,
+                # replay has nothing to re-run, and --mode hybrid pays for "withheld".
+                mapped = hermes.map_payload(
+                    payload,
+                    sequence=collector.store.next_sequence(run),
+                    vault=collector.vault if _config().vault_enabled else None,
+                )
+                if mapped is not None:
+                    collector.record(mapped)
+        except Exception:
+            # The index was unreachable, so opening the collector failed before anything
+            # could be written. That is precisely when history matters most: an agent
+            # delegating to parallel subagents fires several of these processes at one
+            # store within milliseconds, and DuckDB admits a single writer. Losing the
+            # step because the *derived* index was busy would break the one invariant
+            # the whole design rests on.
+            #
+            # So fall through to the journal, which is the authoritative record and is
+            # append-safe across processes. `runopsy doctor` reports the drift and
+            # `rebuild` restores the index from exactly these files.
+            _record_to_journal_only(payload, run, store)
     except Exception as error:
         # Reported rather than swallowed. Exiting zero keeps the agent running, but a
         # recorder that fails silently leaves a user with no trace and no reason why,
@@ -189,6 +202,41 @@ def hook_command(
         print(f"runopsy: could not record {event}: {type(error).__name__}", file=sys.stderr)
 
     typer.echo(decision)
+
+
+def _record_to_journal_only(payload: dict[str, object], run: str, store: Path | None) -> None:
+    """Write one hook event using nothing but the journal.
+
+    The fallback for a locked index. It touches no database, so it cannot be blocked by
+    another process holding one, and the sequence number comes from the journal itself
+    rather than from a query.
+
+    Counting the journal is O(n) per event where the indexed path is O(1), which would
+    be the wrong trade on the normal path and is the right one here: this runs only when
+    the alternative is losing the event, and a hook writing a few hundred lines costs
+    nothing a person would notice.
+    """
+    from runopsy_adapter import hermes as hermes_adapter
+    from runopsy_collector import StorePaths
+    from runopsy_collector.journal import EventJournal
+
+    paths = StorePaths.resolve(store)
+    paths.ensure()
+    journal = EventJournal(paths.journal(run))
+
+    # Where the indexed path would ask the store. Two hooks racing here can land on the
+    # same number; `check_integrity` reports that as a duplicate rather than hiding it,
+    # which is the honest outcome — a visible collision beats a silent omission.
+    sequence = sum(1 for _ in journal.read())
+
+    mapped = hermes_adapter.map_payload(payload, sequence=sequence)
+    if mapped is not None:
+        journal.append(mapped)
+        print(
+            f"runopsy: index busy, wrote {mapped.event_id} to the journal only "
+            "(run `runopsy doctor`)",
+            file=sys.stderr,
+        )
 
 
 @app.command()

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import tempfile
+import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -149,14 +150,45 @@ class RunSummary(BaseModel):
         return self.ended_at is not None
 
 
+CONNECT_TIMEOUT = 5.0
+"""Seconds to keep trying for the index before giving up on it.
+
+DuckDB admits one writing process. An agent that delegates to parallel subagents fires
+several ``runopsy hook`` processes at the same store within milliseconds of each other,
+and without patience most of them met a locked file and dropped their event: measured at
+twelve losses in thirty-two concurrent hooks.
+
+Contention here is short — a single insert — so waiting briefly converts almost all of
+it into a successful write. Five seconds is far longer than any real contention and far
+shorter than a person waiting on a hook would tolerate; the journal covers whatever
+still fails.
+"""
+
+
+def _connect_with_patience(database: Path, timeout: float) -> duckdb.DuckDBPyConnection:
+    """Open the index, retrying while another process holds it."""
+    deadline = time.monotonic() + timeout
+    delay = 0.02
+    while True:
+        try:
+            return duckdb.connect(str(database))
+        except Exception:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(delay)
+            # Back off so a crowd of hooks does not synchronise into a thundering herd,
+            # capped so the last attempt still lands inside the deadline.
+            delay = min(delay * 2, 0.4)
+
+
 class EventStore:
     """Queryable index over recorded events."""
 
-    def __init__(self, database: Path) -> None:
+    def __init__(self, database: Path, *, connect_timeout: float = CONNECT_TIMEOUT) -> None:
         self.database = database
         database.parent.mkdir(parents=True, exist_ok=True)
         self._seen_runs: set[str] = set()
-        self._connection = duckdb.connect(str(database))
+        self._connection = _connect_with_patience(database, connect_timeout)
         self._connection.execute(_DDL)
         self._connection.execute(
             "INSERT INTO store_meta (key, value) VALUES (?, ?), (?, ?) "

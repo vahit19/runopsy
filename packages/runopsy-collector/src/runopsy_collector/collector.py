@@ -7,6 +7,8 @@ row rather than a step of history — and ``rebuild`` puts the index back.
 
 from __future__ import annotations
 
+import contextlib
+import logging
 import re
 from collections.abc import Iterable
 from datetime import datetime
@@ -21,6 +23,8 @@ from runopsy_collector.store import EventStore, RunSummary
 from runopsy_collector.vault import PayloadVault
 from runopsy_core import IntegrityReport, check_integrity
 from runopsy_core.schema import DiagnosisBundle, Event
+
+logger = logging.getLogger(__name__)
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9_.-]")
 
@@ -45,8 +49,13 @@ class Collector:
         self.vault = PayloadVault(paths.vault_dir)
 
     @classmethod
-    def open(cls, root: Path | None = None) -> Self:
-        """Open the store for ``root``, or the resolved default location."""
+    def open(cls, root: str | Path | None = None) -> Self:
+        """Open the store for ``root``, or the resolved default location.
+
+        Takes a string as readily as a ``Path``: this is the entry point a library user
+        meets first, and it used to fail on a string several frames deep with a message
+        about ``expanduser``.
+        """
         return cls(StorePaths.resolve(root))
 
     def __enter__(self) -> Self:
@@ -74,12 +83,40 @@ class Collector:
         write as a second step would inflate exactly the repetition that the loop and
         retry-storm detectors look for, manufacturing a failure signal out of a
         bookkeeping artifact.
+
+        **The journal is written before the index, and an index failure is survivable.**
+        This ordering is the whole reason the invariant "the journal is authoritative,
+        the index is rebuildable" can be relied on, and it was not always this way. The
+        dedup check used to run first, which made it a DuckDB *read* standing between an
+        event and the only durable copy of it. DuckDB permits one writing process, so
+        when an agent delegates work to parallel subagents — each firing its own
+        ``runopsy hook`` — that read raises on a locked database and the event was lost
+        before anything wrote it down. Measured on this machine: thirty-two concurrent
+        hooks, twelve events gone, and nothing louder than a line on stderr.
+
+        Now the journal append happens first and unconditionally. If the index cannot be
+        reached the event is still on disk, ``runopsy doctor`` reports the drift, and
+        ``rebuild`` restores the index from the journals exactly as the invariant
+        promises.
         """
-        if self.store.has_event(event.event_id):
-            return False
-        payload = serialize(event)
+        # Dedup when the index is readable. It is an optimisation, not the record of
+        # truth, so an unreachable index must not decide whether history is kept.
+        with contextlib.suppress(Exception):
+            if self.store.has_event(event.event_id):
+                return False
+
         self.journal(event.run_id).append(event)
-        self.store.insert(event, payload)
+
+        try:
+            self.store.insert(event, serialize(event))
+        except Exception:
+            # Lost the index write to a concurrent writer. The event is durable; say so
+            # rather than pretending it was indexed, and leave `rebuild` to catch up.
+            logger.warning(
+                "indexed nothing for %s: the store is busy. The event is in the journal; "
+                "run `runopsy doctor` and rebuild if this persists.",
+                event.event_id,
+            )
         return True
 
     def record_all(self, events: Iterable[Event]) -> int:

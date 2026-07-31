@@ -39,15 +39,22 @@ class StorePaths:
     root: Path
 
     @classmethod
-    def resolve(cls, root: Path | None = None) -> StorePaths:
+    def resolve(cls, root: str | Path | None = None) -> StorePaths:
         """Pick the store location.
 
         Explicit argument wins, then ``RUNOPSY_HOME``, then ``.runopsy`` beside the
         project being worked on. The project-local default keeps one repository's traces
         from mixing into another's, which matters because a diagnosis compares runs.
+
+        A string is accepted as well as a ``Path``. The annotation said ``Path`` and
+        nothing enforced it at runtime, so ``Collector.open("./runs")`` — the most
+        natural thing for a library user to write — died on
+        ``'str' object has no attribute 'expanduser'``, several frames from anything
+        they wrote. Accepting both costs one call and removes an error message that
+        explains nothing.
         """
         if root is not None:
-            return cls(root=root.expanduser().resolve())
+            return cls(root=Path(root).expanduser().resolve())
         from_env = os.environ.get(HOME_ENV_VAR)
         if from_env:
             return cls(root=Path(from_env).expanduser().resolve())
