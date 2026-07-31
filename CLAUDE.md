@@ -247,7 +247,9 @@ runopsy hook                                             # called by Hermes, not
 
 Still to come, per the design document: `graph` (the HTML report and `ui` cover it for now), `run` (`record` covers wrapping a pipeline; a true `run` needs the runtime adapter driving the agent), and `adapter hermes status`.
 
-Conventions worth preserving when adding commands: every command takes `--store`; `latest` resolves to the most recently started run; findings never fail the command unless CI opts in; anything that could leak is redacted by default.
+Conventions worth preserving when adding commands: every command that reads or writes recorded runs takes `--store` (`setup`, `bench` and `config` do not, and should not — they touch the keyring, the synthetic corpus and `runopsy.toml` respectively); `latest` resolves to the most recently started run; findings never fail the command unless CI opts in; anything that could leak is redacted by default.
+
+Anything the output tells a user to run must actually run. `tests/test_real_run.py` executes the replay command that `diagnose` prints, because for two months it printed a `--dry-run` flag that does not exist — asserting on the text of a hint is not the same as checking the hint works.
 
 Hermes slash commands: `/runopsy status|diagnose|evidence <n>|graph|replay <n>|mode offline|budget <usd>`
 
