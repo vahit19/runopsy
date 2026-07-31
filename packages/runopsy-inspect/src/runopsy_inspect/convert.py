@@ -77,6 +77,23 @@ def _flagged(*texts: str | None) -> SecurityMetadata:
     return SecurityMetadata(redacted=bool(found), contains_secret=bool(found))
 
 
+def _moment(value: object) -> datetime | None:
+    """A timestamp from whatever inspect-ai stored, or None.
+
+    It stores ISO strings in some versions and datetimes in others, and omits the field
+    entirely in older ones. Reading defensively is what lets this adapter span a range
+    of releases instead of pinning to whichever it was written against.
+    """
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
 def run_id_for(log: EvalLog, sample: EvalSample) -> str:
     """A run id that is stable across re-reads of the same log.
 
@@ -119,9 +136,16 @@ def sample_to_events(
 ) -> list[Event]:
     """One Inspect sample as a Runopsy trace."""
     run_id = run_id_for(log, sample)
-    started = sample.started_at or getattr(log.eval, "created", None) or datetime.now(UTC)
-    if isinstance(started, str):
-        started = datetime.fromisoformat(started)
+    # Read through getattr: `started_at` and `completed_at` do not exist on every
+    # supported inspect-ai, and a field appearing in a later version must widen what
+    # this can read rather than narrow it. A sample with no timestamps still describes
+    # a real run; falling back to the eval's own creation time loses precision, not the
+    # trace.
+    started = (
+        _moment(getattr(sample, "started_at", None))
+        or _moment(getattr(log.eval, "created", None))
+        or datetime.now(UTC)
+    )
 
     events: list[Event] = [
         RunStartEvent(
@@ -145,9 +169,7 @@ def sample_to_events(
             events.append(mapped)
             sequence += 1
 
-    ended = sample.completed_at or started
-    if isinstance(ended, str):
-        ended = datetime.fromisoformat(ended)
+    ended = _moment(getattr(sample, "completed_at", None)) or started
     events.append(
         RunEndEvent(
             event_id=f"{run_id}_evt_{sequence:04d}",

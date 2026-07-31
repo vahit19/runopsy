@@ -215,6 +215,39 @@ class TestWhatInspectStatesIsWhatIsRecorded:
         assert len([e for e in events if isinstance(e, ToolCallEvent)]) == 1
 
 
+class TestItSpansMoreThanOneUpstreamVersion:
+    """Fields inspect-ai added later must not be required by this adapter.
+
+    Found the hard way. The adapter was written against 0.3.251 and read
+    `sample.started_at` directly; a security constraint then forced the supported
+    version down to 0.3.145, where that attribute does not exist — and every
+    conversion raised. A field appearing in a later release should widen what this can
+    read, never narrow it.
+    """
+
+    def test_a_sample_without_timestamps_still_converts(self) -> None:
+        log = build_log()
+        sample = only_sample(log)
+        object.__setattr__(sample, "__dict__", {**sample.__dict__})
+        sample.__dict__.pop("started_at", None)
+        sample.__dict__.pop("completed_at", None)
+
+        events = sample_to_events(log, sample)
+
+        assert events[0].kind.value == "run_start"
+        assert events[-1].kind.value == "run_end"
+
+    def test_timestamps_are_ordered_even_when_only_one_is_known(self) -> None:
+        """A run that ends before it starts would break every downstream ordering."""
+        log = build_log()
+        sample = only_sample(log)
+        sample.__dict__.pop("completed_at", None)
+
+        events = sample_to_events(log, sample)
+
+        assert events[-1].timestamp >= events[0].timestamp
+
+
 class TestTheEngineCanReadTheResult:
     def test_a_converted_trace_diagnoses_normally(self) -> None:
         log = build_log()

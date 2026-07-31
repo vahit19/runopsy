@@ -25,7 +25,12 @@ dependencies = [
     "runopsy-adapter",
     "runopsy-collector",
     "typer>=0.12",
-    "inspect-ai>=0.3.100",
+    # Upper bound deliberate. inspect-ai 0.3.240 and later cap click below 8.2.2, which
+    # is inside the range carrying PYSEC-2026-2132 (command injection in click.edit()).
+    # Given a choice between the newest eval-log reader and a dependency with no known
+    # command-injection hole, this takes the latter. 0.3.145 exposes the same
+    # inspect_ai.event API this adapter reads. Revisit when upstream relaxes its pin.
+    "inspect-ai>=0.3.145,<0.3.240",
 ]
 
 [project.scripts]

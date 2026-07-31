@@ -29,6 +29,11 @@ dependencies = [
     "runopsy-semantic",
     "typer>=0.12",
     "rich>=13.7",
+    # Transitive through typer, pinned here because 8.3.2 and below carry
+    # PYSEC-2026-2132: command injection in click.edit(). Runopsy never calls it,
+    # but shipping a known-vulnerable dependency means every user's own audit
+    # reports it, and "we do not use that function" is not a fix.
+    "click>=8.3.3",
 ]
 
 [project.scripts]
