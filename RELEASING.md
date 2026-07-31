@@ -41,19 +41,35 @@ secrets to leak. That means PyPI has to be told which workflow it trusts, and un
 told, the job fails at the last step with an authentication error.
 
 For each of the ten distributions, on PyPI under *Publishing → Add a pending
-publisher*:
+publisher*. The **environment name is what makes each registration distinct**, and
+getting it wrong is the one thing that will stop you: PyPI identifies a pending
+publisher by (repository, workflow, environment), so leaving the environment blank on
+the second entry is refused with *"a pending trusted publisher matching this
+configuration has already been registered for a different project name"*.
 
-| field | value |
+| PyPI project name | Environment name |
 | --- | --- |
-| PyPI project name | `runopsy` first, then `runopsy-core`, `runopsy-cli`, … (one entry each) |
-| Owner | your GitHub account or organisation |
-| Repository name | `runopsy` |
-| Workflow name | `release.yml` |
-| Environment name | `pypi` |
+| `runopsy` | `pypi-runopsy` |
+| `runopsy-core` | `pypi-runopsy-core` |
+| `runopsy-collector` | `pypi-runopsy-collector` |
+| `runopsy-adapter` | `pypi-runopsy-adapter` |
+| `runopsy-replay` | `pypi-runopsy-replay` |
+| `runopsy-semantic` | `pypi-runopsy-semantic` |
+| `runopsy-bench` | `pypi-runopsy-bench` |
+| `runopsy-cli` | `pypi-runopsy-cli` |
+| `runopsy-server` | `pypi-runopsy-server` |
+| `runopsy-inspect` | `pypi-runopsy-inspect` |
 
-Then create the `pypi` environment in the repository's *Settings → Environments*. Adding
-a required reviewer there is worth doing: it makes publication a decision someone takes
-rather than a side effect of pushing a tag.
+Owner is your GitHub account, Repository name is `runopsy`, and Workflow name is
+`release.yml` on every one of them.
+
+Register `runopsy` first. Configuring a pending publisher does **not** reserve the name
+— PyPI says so on that page — and `runopsy` is the only name anyone will guess.
+
+GitHub creates each `pypi-*` environment the first time the workflow references it, so
+there is nothing to do there. Adding a required reviewer to `pypi-runopsy` afterwards is
+worth it: it makes publishing the name everyone installs a decision someone takes, rather
+than a side effect of pushing a tag.
 
 A `PYPI_API_TOKEN` is **not** needed and should not be added. A long-lived token in
 repository secrets is exactly the credential that trusted publishing exists to remove,

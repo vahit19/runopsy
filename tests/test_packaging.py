@@ -184,3 +184,24 @@ class TestTheGatesCannotBeSkippedByAccident:
 
         assert "needs: verify" in release
         assert "startsWith(github.ref, 'refs/tags/v')" in release
+
+    @pytest.mark.parametrize("package", PACKAGES)
+    def test_every_package_is_in_the_publish_matrix(self, package: str) -> None:
+        """A package missing here is one that silently never reaches PyPI.
+
+        The matrix is hand-listed because each entry needs its own environment: PyPI
+        identifies a pending trusted publisher by (repository, workflow, environment),
+        so ten distributions cannot share one. Hand-listed means it can fall behind,
+        which is what this catches.
+        """
+        assert f"- {package}\n" in workflow("release.yml"), (
+            f"{package} is not in the release publish matrix, so it would never be published"
+        )
+
+    @pytest.mark.parametrize("package", PACKAGES)
+    def test_each_package_publishes_from_its_own_environment(self, package: str) -> None:
+        """Shared environments are exactly what PyPI refuses to register twice."""
+        release = workflow("release.yml")
+
+        assert "environment: pypi-${{ matrix.package }}" in release
+        assert release.count(f"- {package}\n") == 1
