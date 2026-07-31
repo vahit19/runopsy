@@ -8,9 +8,15 @@ The ten-item first sprint from section 24 of the design document is complete. Th
 
 `runopsy-proje-tasarim-belgesi.pdf` — the 39-page Turkish design document (v0.2, 30 July 2026) — remains the single source of truth. For anything this file does not cover, read the PDF rather than inventing an approach.
 
-**Shipped:** `runopsy-core` (schema, normalizer, 15 detectors, impact, ranking, diagnosis) · `runopsy-collector` (JSONL journals + DuckDB index) · `runopsy-cli` (`runs`, `diagnose`, `evidence`, `replay`, `export`, `bench`, `doctor`) · `runopsy-replay` (planning with a fail-closed side-effect gate) · `runopsy-bench` (20 labelled cases, metrics, baselines).
+**Shipped**, eight packages: `runopsy-core` (schema, normalizer, 15 detectors, impact, ranking, diagnosis, structured logging, OpenInference/OTLP export) · `runopsy-collector` (JSONL journals, DuckDB index, payload vault, retention) · `runopsy-cli` (14 commands, see *Interfaces*) · `runopsy-replay` (planning **and** counterfactual execution behind a fail-closed side-effect gate) · `runopsy-bench` (20 labelled cases, metrics, baselines, fault injection, performance) · `runopsy-adapter` (shell + Hermes, verified against hermes-agent 0.19.0) · `runopsy-semantic` (L3, budget-capped, opt-in) · `runopsy-server` (FastAPI, loopback).
 
-**Not built yet:** the L3 semantic layer (needs provider calls), the FastAPI server, the React UI, fault-injection benchmark layers, keyring onboarding (`runopsy setup`), and PyPI publication. Replay *execution* now exists: `runopsy replay --execute` runs a counterfactual experiment in a sandbox copy, and a supporting result upgrades the candidate to `replay_supported` — including creating a candidate at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
+Replay execution runs a counterfactual experiment in a sandbox copy; a supporting result upgrades a candidate to `replay_supported`, including creating one at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
+
+**Not built yet:** the React UI (`runopsy ui` serves an HTML view instead) · `runopsy graph` and `runopsy run` as separate commands · four of the design's API endpoints (`GET /v1/diagnoses/{id}`, `POST /v1/runs/{id}/replay`, the SSE stream, `POST /v1/export`) · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
+
+**The gap that matters most is none of those.** No Runopsy component has ever recorded a real agent run. Every number in this file comes from constructed traces, and the engine has never seen a trace it did not help write. The Hermes adapter is verified against the documented wire protocol, not against a live session. Treat accuracy claims accordingly, and prefer work that closes this over work that adds surface.
+
+**Keep this section true.** It is the first thing read and the easiest thing to leave stale; a wrong "not built yet" costs a future session real time. If a change ships a capability listed here as missing, move it in the same commit.
 
 Measured onset localization, reproducible via `runopsy bench --compare` and recorded in `benchmarks/baseline-report.md`: top-1 94.4%, top-3 100%, mean step distance 0.11, zero false positives — against 22.2% for blaming the last failing step, which is what reading a log bottom-up achieves.
 
@@ -18,16 +24,26 @@ Measured onset localization, reproducible via `runopsy bench --compare` and reco
 
 ```bash
 uv sync                       # install; pins Python 3.12 via .python-version
-uv run pytest                 # 286 tests
+uv run pytest                 # ~590 tests, ~100s; coverage gate is 85%
 uv run pytest tests/test_diagnose.py::TestConfidence   # one class
 uv run ruff check . && uv run ruff format .
+# Every package, named explicitly: the CI matrix runs bash and PowerShell, and
+# PowerShell does not expand a glob for a native command, so packages/*/src would
+# reach mypy as a literal path — checking nothing while still exiting zero.
 uv run mypy packages/runopsy-core/src packages/runopsy-collector/src \
             packages/runopsy-cli/src packages/runopsy-bench/src \
-            packages/runopsy-replay/src tests
+            packages/runopsy-replay/src packages/runopsy-adapter/src \
+            packages/runopsy-semantic/src packages/runopsy-server/src tests
+uv run bandit -c pyproject.toml -r packages -q   # exits non-zero on any finding
 uv run python examples/coding_failure/seed.py   # seed the demo trace
 uv run runopsy diagnose --store .runopsy-demo
 uv run runopsy bench --write benchmarks/baseline-report.md
 ```
+
+`tests/test_packaging.py` fails if this command, CONTRIBUTING.md's or CI's falls behind
+the `packages/` directory. It exists because the CI list once named six of the eight, so
+two packages would have gone unchecked while mypy still reported success — a gate that
+narrows silently is worse than none, because the green tick goes on being believed.
 
 `uv` lives at `~/.local/bin` and may not be on PATH in a fresh shell.
 
@@ -197,22 +213,32 @@ analysis: { mode: deterministic, llm_on: suspicious, max_diagnostic_calls: 2,
 Implemented:
 
 ```bash
+runopsy record -s CMD ...                                # wrap any pipeline
 runopsy runs
-runopsy diagnose [RUN|latest] [--json] [--fail-on-finding]
+runopsy diagnose [RUN|latest] [--json] [--fail-on-finding] [--mode hybrid] [--budget-usd U]
 runopsy evidence [RUN|latest] --step N
-runopsy replay  [RUN|latest] --from-step N [--model M]   # plans only, never executes
-runopsy export  [RUN|latest] [-o FILE] [--include-sensitive]
-runopsy bench [--compare] [--write PATH] [--verbose]
+runopsy replay  [RUN|latest] --from-step N [--model M]   # plans; --execute tests it
+       [--execute] [--skip-onset | --substitute CMD]     # one intervention, sandbox copy
+runopsy export  [RUN|latest] [-o FILE] [--include-sensitive] [--otlp]
+runopsy ui                                               # loopback only
+runopsy prune [--apply]                                  # never expires anything on its own
+runopsy bench [--compare] [--inject] [--perf] [--write PATH] [--verbose]
+runopsy setup                                            # key to the OS keyring
 runopsy doctor
+runopsy config [--init]
+runopsy adapter hermes                                   # config to paste
+runopsy hook                                             # called by Hermes, not by hand
 ```
 
-Still to come, per the design document: `setup` (keyring onboarding), `adapter hermes status`, `run` (needs the runtime adapter), `graph`, `ui`, and `--mode hybrid` once the semantic layer exists.
+Still to come, per the design document: `graph` (the HTML report and `ui` cover it for now), `run` (`record` covers wrapping a pipeline; a true `run` needs the runtime adapter driving the agent), and `adapter hermes status`.
 
 Conventions worth preserving when adding commands: every command takes `--store`; `latest` resolves to the most recently started run; findings never fail the command unless CI opts in; anything that could leak is redacted by default.
 
 Hermes slash commands: `/runopsy status|diagnose|evidence <n>|graph|replay <n>|mode offline|budget <usd>`
 
-Local API: `POST /v1/events` · `GET /v1/runs` · `GET /v1/runs/{id}` · `GET /v1/runs/{id}/graph` · `POST /v1/runs/{id}/diagnose` · `GET /v1/diagnoses/{id}` · `POST /v1/runs/{id}/replay/plan` · `POST /v1/runs/{id}/replay` · `GET /v1/runs/{id}/stream` (SSE) · `POST /v1/export`
+Local API, loopback only. Implemented: `GET /v1/health` · `POST /v1/events` · `GET /v1/runs` · `GET /v1/runs/{id}` · `GET /v1/runs/{id}/graph` · `POST /v1/runs/{id}/diagnose` · `POST /v1/runs/{id}/replay/plan` · `GET /v1/runs/{id}/report`.
+
+Designed but not implemented: `GET /v1/diagnoses/{id}` · `POST /v1/runs/{id}/replay` · `GET /v1/runs/{id}/stream` (SSE) · `POST /v1/export`. The replay-execution endpoint is deliberately last: executing over HTTP needs an approval path that the CLI gets from the terminal, and shipping it without one would put the fail-closed gate behind a request body.
 
 Storage split: structured events → DuckDB · raw event stream → append-only JSONL · artifacts → content-addressed local folder (SHA-256, size limit, secret scan) · graph cache → Parquet/DuckDB · diagnoses → JSON.
 
@@ -224,7 +250,7 @@ Storage split: structured events → DuckDB · raw event stream → append-only 
 
 **MVP acceptance criteria (section 18.1)** — in offline mode zero external model calls; at least eight deterministic detectors working end to end; diagnosis JSON carrying evidence, confidence and affected nodes per candidate; dry-run plans for rollback and fork; risky external side-effect replay blocked by default; 2D timeline and causal graph sharing the same trace node IDs; reproducible benchmark report; one-command local demo.
 
-**First sprint (section 24): complete**, except item 1 — the Hermes plugin remains a spike, so nothing yet captures a real run. That is the next thing that matters: every number above comes from constructed traces, and the engine has never seen a trace it did not help write.
+**First sprint (section 24): complete.** The Hermes adapter is built and verified against hermes-agent 0.19.0's documented shell-hook wire protocol — but verified against the protocol is not the same as observed in a session, and no live run has ever been recorded. Every number in this file comes from constructed traces, and the engine has never seen a trace it did not help write. That remains the next thing that matters; adding surface before closing it makes the claims broader without making them better.
 
 Priority rule: event capture and schema correctness first, then the deterministic engine, then evidence/2D UX, then replay and semantic evaluation, and 3D/cloud last.
 

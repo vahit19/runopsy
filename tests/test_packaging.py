@@ -37,14 +37,19 @@ class TestEveryPackageIsWiredIn:
             f"{package} is not in the CI type-check step, so mypy never sees it"
         )
 
+    @pytest.mark.parametrize("document", ["CONTRIBUTING.md", "CLAUDE.md"])
     @pytest.mark.parametrize("package", PACKAGES)
-    def test_the_contributor_instructions_check_it_too(self, package: str) -> None:
-        """A contributor who runs the documented command should see what CI will see."""
-        instructions = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    def test_the_documented_command_checks_it_too(self, package: str, document: str) -> None:
+        """Whoever runs the documented command should see what CI will see.
 
-        assert f"packages/{package}/src" in instructions, (
-            f"{package} is missing from the mypy command in CONTRIBUTING.md, so a "
-            "contributor would pass locally and fail in CI"
+        Both files carry their own copy of the mypy invocation, and both had fallen
+        behind the packages directory — CLAUDE.md by three. A command that passes
+        locally and fails in CI wastes the time of the next person either way.
+        """
+        text = (ROOT / document).read_text(encoding="utf-8")
+
+        assert f"packages/{package}/src" in text, (
+            f"{package} is missing from the mypy command in {document}"
         )
 
     @pytest.mark.parametrize("package", PACKAGES)
