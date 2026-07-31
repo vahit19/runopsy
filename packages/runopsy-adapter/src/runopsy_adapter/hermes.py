@@ -22,6 +22,7 @@ blocking is a policy decision that belongs to an explicit, reviewed configuratio
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any, Final
 
@@ -140,6 +141,25 @@ def _preserve(vault: PayloadStore | None, *texts: str | None) -> None:
             vault.put(text, stored_text=found.redacted if found.found else None)
 
 
+def _result_exit_code(output: str | None) -> int | None:
+    """The exit code a tool result reports about the command it ran, if it reports one.
+
+    Only a JSON object with an integer ``exit_code`` counts. Anything else returns None
+    and the runtime's own status stands: guessing a failure out of unstructured text
+    would manufacture findings, which is the one thing this project must not do.
+    """
+    if not output:
+        return None
+    try:
+        parsed = json.loads(output)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    code = parsed.get("exit_code")
+    return code if isinstance(code, int) and not isinstance(code, bool) else None
+
+
 def map_payload(
     payload: dict[str, Any],
     *,
@@ -201,6 +221,19 @@ def map_payload(
         output = _text(extra.get("result"))
         error_type = _text(extra.get("error_type"))
         status = _STATUS.get(str(extra.get("status") or "ok"), CallStatus.OK)
+        exit_code = 1 if status is CallStatus.ERROR else 0
+
+        # Hermes reports whether the *tool* ran, not whether the command it ran
+        # succeeded. Its terminal tool returns {"output": ..., "exit_code": N} and
+        # reports status "ok" whenever the shell was invoked at all — so a test suite
+        # failing every time looked, to the detectors, like twenty-one successful steps.
+        # On the first real trace measured that was exactly the count.
+        inner = _result_exit_code(output)
+        if inner is not None and status is CallStatus.OK:
+            exit_code = inner
+            if inner != 0:
+                status = CallStatus.ERROR
+
         _preserve(vault, arguments, output)
         return ToolCallEvent(
             **common,
@@ -209,7 +242,7 @@ def map_payload(
                 name=_text(payload.get("tool_name")) or "tool",
                 arguments_hash=hash_text(arguments) if arguments else None,
                 output_hash=hash_text(output) if output else None,
-                exit_code=1 if status is CallStatus.ERROR else 0,
+                exit_code=exit_code,
                 duration_ms=max(int(extra.get("duration_ms") or 0), 0),
                 status=status,
                 error_type=error_type,

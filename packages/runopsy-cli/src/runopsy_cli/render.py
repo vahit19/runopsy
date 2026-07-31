@@ -7,6 +7,8 @@ without scrolling on a normal terminal.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
@@ -304,7 +306,70 @@ def replay_verdict(verdict: ReplayVerdict) -> RenderableType:
     return Group(*parts)
 
 
-def evidence(bundle: DiagnosisBundle, graph: TraceGraph, node_id: str) -> RenderableType:
+MAX_PAYLOAD_LINES = 12
+MAX_PAYLOAD_CHARS = 1200
+
+
+def _payload_block(
+    body: Text,
+    node: object,
+    resolve: Callable[[str], str | None] | None,
+    *,
+    reveal: bool,
+) -> None:
+    """Show what the step actually ran and what came back.
+
+    A hash answers "was it the same call as before" and nothing else. Someone reading
+    the evidence for a flagged step wants the command, and printing only digests made
+    this view technically complete and practically useless.
+
+    Steps flagged as carrying a credential stay withheld unless asked for, matching
+    ``runopsy export``. What the vault holds is already redacted, so revealing shows the
+    censored form rather than the secret.
+    """
+    if resolve is None:
+        return
+    attributes = getattr(node, "attributes", {}) or {}
+    flagged = bool(attributes.get("contains_secret"))
+
+    for label, key in (("command", "arguments_hash"), ("output", "output_hash")):
+        digest = attributes.get(key)
+        if not isinstance(digest, str) or not digest:
+            continue
+        if flagged and not reveal:
+            body.append(f"  {label}: ", style="dim")
+            body.append("withheld — flagged as carrying a credential; ", style="yellow")
+            body.append("pass --include-sensitive\n", style="dim")
+            continue
+        text = resolve(digest)
+        if text is None:
+            body.append(f"  {label}: ", style="dim")
+            body.append("not kept locally (vault off, or pruned)\n", style="dim")
+            continue
+        body.append(f"  {label}\n", style="dim")
+        for line in _payload_lines(text):
+            body.append(f"    {line}\n")
+
+
+def _payload_lines(text: str) -> list[str]:
+    truncated = text[:MAX_PAYLOAD_CHARS]
+    lines = truncated.splitlines() or [""]
+    if len(lines) > MAX_PAYLOAD_LINES:
+        hidden = len(lines) - MAX_PAYLOAD_LINES
+        lines = [*lines[:MAX_PAYLOAD_LINES], f"… {hidden} more line(s)"]
+    elif len(text) > MAX_PAYLOAD_CHARS:
+        lines.append(f"… {len(text) - MAX_PAYLOAD_CHARS} more character(s)")
+    return lines
+
+
+def evidence(
+    bundle: DiagnosisBundle,
+    graph: TraceGraph,
+    node_id: str,
+    *,
+    resolve_payload: Callable[[str], str | None] | None = None,
+    include_sensitive: bool = False,
+) -> RenderableType:
     """The ``runopsy evidence`` view for one step."""
     node = graph.node(node_id)
     if node is None:
@@ -315,6 +380,7 @@ def evidence(bundle: DiagnosisBundle, graph: TraceGraph, node_id: str) -> Render
     body.append(
         f"{node.kind.value} · agent {node.agent_id} · {node.timestamp:%H:%M:%S}\n\n", style="dim"
     )
+    _payload_block(body, node, resolve_payload, reveal=include_sensitive)
 
     for key, value in sorted(node.attributes.items()):
         if value in (None, "", {}, []):

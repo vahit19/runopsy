@@ -372,6 +372,10 @@ def evidence(
         int | None, typer.Option("--step", help="Sequence number of the step to inspect.")
     ] = None,
     store: StoreOption = None,
+    include_sensitive: Annotated[
+        bool,
+        typer.Option("--include-sensitive", help="Show payloads for steps flagged as sensitive."),
+    ] = False,
 ) -> None:
     """Show the recorded evidence behind one step."""
     if step is None:
@@ -387,13 +391,38 @@ def evidence(
 
         context = AnalysisContext.from_events(run_id, events)
         bundle = run_diagnosis(context)
+        # Read the text inside the collector's lifetime; the vault is on disk beside it.
+        payloads = {
+            digest: entry.text
+            for digest in _payload_digests(context)
+            if (entry := collector.vault.get(digest)) is not None
+        }
 
     node = next((n for n in context.graph.nodes if n.sequence == step), None)
     if node is None:
         errors.print(f"Run {run_id} has no step {step}.", style="red")
         raise typer.Exit(code=2)
 
-    console.print(render.evidence(bundle, context.graph, node.node_id))
+    console.print(
+        render.evidence(
+            bundle,
+            context.graph,
+            node.node_id,
+            resolve_payload=payloads.get,
+            include_sensitive=include_sensitive,
+        )
+    )
+
+
+def _payload_digests(context: AnalysisContext) -> set[str]:
+    """Every payload digest referenced by a step in this run."""
+    digests: set[str] = set()
+    for node in context.graph.nodes:
+        for key in ("arguments_hash", "output_hash", "prompt_hash", "response_hash"):
+            value = (node.attributes or {}).get(key)
+            if isinstance(value, str) and value:
+                digests.add(value)
+    return digests
 
 
 @app.command()

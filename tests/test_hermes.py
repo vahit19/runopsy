@@ -355,6 +355,66 @@ def test_every_registered_event_maps_to_something(event: str) -> None:
     assert mapped(event, extra={"child_session_id": "c", "model": "m"}) is not None
 
 
+class TestAFailedCommandIsAFailedStep:
+    """Hermes reports whether the tool ran, not whether the command succeeded.
+
+    Its terminal tool returns {"output": ..., "exit_code": N} and reports status "ok"
+    whenever the shell was invoked at all. A test suite failing on every attempt was
+    therefore recorded as a sequence of successful steps — twenty-one of them in the
+    first real session measured — and the L0 detector, the most basic one in the
+    product, found nothing to report on the primary runtime.
+    """
+
+    def call(self, result: str, *, status: str = "ok") -> Any:
+        return map_payload(
+            payload(
+                "post_tool_call",
+                tool_name="terminal",
+                args="pytest -q",
+                extra={"result": result, "status": status},
+            ),
+            sequence=1,
+            timestamp=NOW,
+        )
+
+    def test_a_nonzero_exit_inside_the_result_marks_the_step_failed(self) -> None:
+        event = self.call(json.dumps({"output": "2 failed", "exit_code": 1}))
+
+        assert event.tool.exit_code == 1
+        assert event.tool.status is CallStatus.ERROR
+
+    def test_a_zero_exit_inside_the_result_stays_successful(self) -> None:
+        event = self.call(json.dumps({"output": "ok", "exit_code": 0}))
+
+        assert event.tool.exit_code == 0
+        assert event.tool.status is CallStatus.OK
+
+    def test_unstructured_output_leaves_the_runtime_status_alone(self) -> None:
+        """Guessing failure out of prose would manufacture findings."""
+        event = self.call("FAIL something went wrong")
+
+        assert event.tool.exit_code == 0
+        assert event.tool.status is CallStatus.OK
+
+    def test_a_result_without_an_exit_code_changes_nothing(self) -> None:
+        event = self.call(json.dumps({"output": "some text"}))
+
+        assert event.tool.status is CallStatus.OK
+
+    def test_a_boolean_is_not_an_exit_code(self) -> None:
+        """bool is an int in Python, and True would silently become exit 1."""
+        event = self.call(json.dumps({"output": "x", "exit_code": True}))
+
+        assert event.tool.exit_code == 0
+
+    def test_the_runtime_reporting_an_error_is_never_overridden(self) -> None:
+        """If Hermes says the tool itself failed, that stands whatever the body says."""
+        event = self.call(json.dumps({"output": "", "exit_code": 0}), status="error")
+
+        assert event.tool.status is CallStatus.ERROR
+        assert event.tool.exit_code == 1
+
+
 class TestPayloadsReachTheVault:
     """The trace stores hashes; the text has to be kept somewhere or it is lost.
 
