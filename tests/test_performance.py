@@ -27,8 +27,24 @@ from runopsy_bench.performance import (
 from runopsy_collector import Collector
 from runopsy_core import AnalysisContext, build_graph, diagnose
 
-MIN_INGEST_EVENTS_PER_SECOND = 2_000
-"""Far below the ~30,000 measured, and far above the 17 that made the tool unusable."""
+MIN_INGEST_EVENTS_PER_SECOND = 300
+"""What this guard is actually for: catching a return to row-at-a-time ingest.
+
+That path measured 17 events per second — ten minutes to ingest a run an agent produces
+in an hour — and the bulk loader took it to roughly 30,000. Any threshold between those
+two catches the regression.
+
+It was 2,000, which sounds prudent and was not. A wall-clock assertion inside a test
+suite competes with every other test on the machine, and this one duly failed at 1,710
+events/sec during a full run while passing five times in a row on its own. A flaky gate
+is worse than a loose one: it teaches people to re-run until green, and then a real
+failure gets the same shrug.
+
+300 is seventeen times the pathological case and a hundred times below the measured
+rate, so it still fails loudly if the bulk path disappears and cannot fail because
+another test was busy. Actual numbers belong in `runopsy bench --perf`, which measures
+rather than asserts.
+"""
 
 MAX_DIAGNOSE_SECONDS_10K = 20.0
 
