@@ -238,3 +238,87 @@ class TestTheCommandWeOfferActuallyRuns:
 
         assert replayed.exit_code == 0, f"{suggested!r} failed:\n{replayed.output}"
         assert "No such option" not in replayed.output
+
+
+class TestWhatRealRunsHaveActuallyExercised:
+    """Which detectors have seen real data, measured rather than assumed.
+
+    Fifteen detectors ship. Across every real Hermes session recorded, three have ever
+    produced a finding: tool_execution, tool_loop and incomplete_run. That is not a bug
+    list — several of the twelve exist for conditions that are supposed to be rare, and
+    two need event kinds Hermes does not emit at all — but it is the honest shape of the
+    evidence behind this engine, and it belongs somewhere a reader will find it.
+
+    These tests pin the behaviours that real runs did confirm, so a refactor cannot
+    quietly undo what the live sessions established.
+    """
+
+    def test_a_complete_handoff_produces_no_finding(self) -> None:
+        """Two real subagent handoffs arrived with summaries, and the detector stayed
+        silent — the zero-false-positive property holding on an event kind it had never
+        seen outside synthetic traces."""
+        from datetime import timedelta
+
+        from runopsy_core.schema import HandoffEvent, HandoffPayload
+
+        events: list[Event] = [
+            run_start(RUN, task="split the work"),
+            HandoffEvent(
+                event_id="evt_1",
+                run_id=RUN,
+                sequence=1,
+                timestamp=START + timedelta(seconds=1),
+                handoff=HandoffPayload(
+                    from_agent_id="parent",
+                    to_agent_id="child_a",
+                    context_hash="sha256:" + "a" * 64,
+                ),
+            ),
+            run_end(2, RUN, outcome=RunOutcome.SUCCESS),
+        ]
+
+        _, bundle = diagnosed(events)
+
+        assert not any("handoff" in " ".join(c.signal_ids) for c in bundle.candidates)
+
+    def test_the_budget_detector_is_off_until_asked_for(self) -> None:
+        """A ceiling that fires by default is a guess about what somebody considers
+        expensive, and a wrong guess there teaches people to ignore the tool."""
+        from runopsy_core.detectors import DetectorSettings
+
+        assert DetectorSettings().token_budget == 0
+        assert DetectorSettings().cost_budget_usd == 0.0
+
+    def test_the_budget_detector_fires_once_a_ceiling_exists(self) -> None:
+        """Verified against a real 56-event session that spent 32,141 tokens: silent by
+        default, correct at a 20k ceiling, silent again at 100k."""
+        from datetime import timedelta
+
+        from runopsy_core.detectors import DetectorSettings
+        from runopsy_core.schema import LlmCallEvent, LlmPayload, TokenUsage
+
+        events: list[Event] = [
+            run_start(RUN, task="spend some tokens"),
+            LlmCallEvent(
+                event_id="evt_1",
+                run_id=RUN,
+                sequence=1,
+                timestamp=START + timedelta(seconds=1),
+                llm=LlmPayload(
+                    model="openai/gpt-4o-mini",
+                    tokens=TokenUsage(input_tokens=30_000, output_tokens=2_141),
+                ),
+            ),
+            run_end(2, RUN, outcome=RunOutcome.SUCCESS),
+        ]
+
+        def budget_findings(ceiling: int) -> list[str]:
+            context = AnalysisContext.from_events(
+                RUN, tuple(events), settings=DetectorSettings(token_budget=ceiling)
+            )
+            bundle = diagnose(context)
+            return [c.summary for c in bundle.candidates if "budget" in " ".join(c.signal_ids)]
+
+        assert budget_findings(0) == []
+        assert budget_findings(20_000)
+        assert budget_findings(100_000) == []
