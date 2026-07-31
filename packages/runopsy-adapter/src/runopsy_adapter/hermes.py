@@ -48,12 +48,39 @@ RUNTIME: Final = "hermes"
 RECORDED_EVENTS: Final = (
     "on_session_start",
     "post_tool_call",
-    "post_llm_call",
     "subagent_stop",
     "on_session_end",
+)
+"""Shell-hook events Runopsy registers for. All are observational.
+
+This is the set hermes-agent 0.19.0 actually dispatches to *shell* hooks, per the
+event table in its own ``agent/shell_hooks.py``: emitted from ``model_tools.py``,
+``conversation_loop.py``, ``turn_finalizer.py`` and ``delegate_tool.py``.
+
+``post_llm_call`` and ``on_session_finalize`` are deliberately absent. They exist in
+Hermes, but only on the **plugin** path — ``hermes_cli.plugins.invoke_hook`` — and a
+shell hook configured for them never fires during a real session. They are easy to
+believe in because ``hermes hooks test post_llm_call`` calls the shell dispatcher
+directly with a synthetic payload and reports success; the first live session recorded
+33 events and not one of them was an LLM call. Registering for an event that cannot
+arrive is worse than not registering: it promises token and cost data the trace will
+never contain, and nothing anywhere reports the omission.
+
+The consequence is a real limitation, not a preference. Through shell hooks alone a
+Hermes trace carries no token counts, cost or model latency, so the budget detector has
+nothing to work with. Closing that needs a Hermes *plugin*, which the design already
+anticipates — and even then the current ``post_llm_call`` payload carries a model name
+and the messages, but no usage figures.
+
+``PLUGIN_ONLY_EVENTS`` keeps the two names so the handler still maps them if a future
+version routes them to shell hooks, or if a plugin forwards them by hand.
+"""
+
+PLUGIN_ONLY_EVENTS: Final = (
+    "post_llm_call",
     "on_session_finalize",
 )
-"""Hook events Runopsy registers for. All are observational."""
+"""Understood when received, but never configured — Hermes 0.19.0 cannot deliver them."""
 
 _STATUS: Final = {
     "ok": CallStatus.OK,
@@ -102,7 +129,7 @@ def map_payload(
     ignored rather than turned into a fabricated step.
     """
     event_name = str(payload.get("hook_event_name") or "")
-    if event_name not in RECORDED_EVENTS:
+    if event_name not in RECORDED_EVENTS and event_name not in PLUGIN_ONLY_EVENTS:
         return None
 
     run_id = run_id_for(payload)
@@ -197,10 +224,17 @@ def hooks_config_block(command: str) -> str:
     Emitted for the user to paste rather than written automatically. Editing another
     tool's configuration behind its owner's back is how integrations become impossible
     to debug, and the file may hold settings we know nothing about.
+
+    The whole ``<command> <event>`` string is one YAML scalar, and it is quoted as one
+    when the path contains a space. Quoting only the path — ``command: "C:/x y/runopsy"
+    hook post_tool_call`` — is invalid YAML, and Hermes responds by discarding the entire
+    config and running with defaults. The session then looks completely normal and
+    records nothing at all, which cost an afternoon the first time.
     """
     lines = ["hooks:"]
     for event in RECORDED_EVENTS:
+        invocation = f"{command} {event}".replace("'", "''")
         lines.append(f"  {event}:")
-        lines.append(f"    - command: {command} {event}")
+        lines.append(f"    - command: '{invocation}'")
         lines.append("      timeout: 10")
     return "\n".join(lines) + "\n"

@@ -41,6 +41,11 @@ dev = [
     "bandit>=1.7",
     "pip-audit>=2.7",
     "cyclonedx-bom>=4.4",
+    # Only the tests need it — to parse the Hermes config block we generate and prove it
+    # is valid YAML. It already arrives transitively, but a test that depends on someone
+    # else's dependency breaks the day that dependency changes.
+    "pyyaml>=6.0",
+    "types-PyYAML>=6.0",
 ]
 
 [tool.ruff]

@@ -181,8 +181,16 @@ def adapter(
     console.print(
         "Then run Hermes once and approve the hooks when prompted, or start it with\n"
         "--accept-hooks. Every hook above only observes; none can block a tool call.\n"
-        "Afterwards: runopsy runs",
+        "Afterwards: runopsy runs\n",
         style="dim",
+    )
+    console.print(
+        "Note: tool calls, sessions and subagents are captured; model calls are not.\n"
+        "Hermes 0.19.0 dispatches post_llm_call only to Python plugins, never to shell\n"
+        "hooks, so a recorded trace carries no token counts, cost or model latency.\n"
+        "'hermes hooks test post_llm_call' will still report success — it calls the\n"
+        "shell dispatcher directly — so it is not evidence that the event arrives.",
+        style="yellow",
     )
 
 

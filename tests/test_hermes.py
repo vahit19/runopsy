@@ -207,7 +207,31 @@ class TestGeneratedConfig:
             assert f"  {event}:" in block
 
     def test_it_names_the_command_hermes_should_run(self) -> None:
-        assert "command: runopsy hook post_tool_call" in hooks_config_block("runopsy hook")
+        assert "command: 'runopsy hook post_tool_call'" in hooks_config_block("runopsy hook")
+
+    def test_the_whole_invocation_is_one_quoted_scalar(self) -> None:
+        """Quoting only the path is invalid YAML, and Hermes fails silently on it.
+
+        ``command: "C:/x y/runopsy" hook post_tool_call`` parses as a quoted scalar
+        followed by junk. Hermes discards the entire config, runs with defaults, and
+        records nothing — a session that looks completely normal and produces no trace.
+        """
+        import yaml
+
+        block = hooks_config_block("C:/Program Files/runopsy.exe hook")
+        parsed = yaml.safe_load(block)
+
+        command = parsed["hooks"]["post_tool_call"][0]["command"]
+        assert command == "C:/Program Files/runopsy.exe hook post_tool_call"
+
+    def test_a_command_containing_a_quote_survives_the_round_trip(self) -> None:
+        import yaml
+
+        block = hooks_config_block("/opt/o'brien/runopsy hook")
+
+        assert yaml.safe_load(block)["hooks"]["on_session_end"][0]["command"] == (
+            "/opt/o'brien/runopsy hook on_session_end"
+        )
 
     def test_it_bounds_the_hook_timeout(self) -> None:
         """An unbounded hook would let a stalled recorder hang the agent."""
