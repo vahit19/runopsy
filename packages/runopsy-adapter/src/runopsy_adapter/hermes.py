@@ -23,7 +23,10 @@ blocking is a policy decision that belongs to an explicit, reviewed configuratio
 from __future__ import annotations
 
 import json
+import os
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Final
 
 from runopsy_adapter.recorder import PayloadStore
@@ -276,6 +279,83 @@ def map_payload(
             missing_fields=() if summary else ("child_summary",),
         ),
         security=_flagged(summary, child_status),
+    )
+
+
+CONFIG_LOCATIONS: Final = (
+    ("LOCALAPPDATA", "hermes/config.yaml"),
+    (None, ".hermes/config.yaml"),
+    (None, ".config/hermes/config.yaml"),
+)
+"""Where hermes-agent keeps its config, in the order it is worth looking.
+
+Windows reports ``%LOCALAPPDATA%/hermes/config.yaml``; the POSIX builds use a dotfile.
+``hermes config path`` is authoritative, but shelling out to another tool to find out
+whether that tool is configured fails exactly when the answer matters most.
+"""
+
+
+@dataclass(frozen=True)
+class AdapterStatus:
+    """What `runopsy adapter hermes status` found."""
+
+    config_path: Path | None
+    parse_error: str | None
+    configured: tuple[str, ...]
+    missing: tuple[str, ...]
+    never_fires: tuple[str, ...]
+
+    @property
+    def is_wired(self) -> bool:
+        return self.config_path is not None and not self.parse_error and not self.missing
+
+
+def _config_candidates() -> list[Path]:
+    paths: list[Path] = []
+    for variable, suffix in CONFIG_LOCATIONS:
+        root = os.environ.get(variable) if variable else None
+        base = Path(root) if root else Path.home()
+        paths.append(base / suffix)
+    return paths
+
+
+def adapter_status(config_path: Path | None = None) -> AdapterStatus:
+    """Report whether Hermes is actually wired to Runopsy.
+
+    Written because the failure this detects is silent. An invalid hook block makes
+    Hermes discard its whole config and run with defaults, and a hook registered for an
+    event Hermes only sends to plugins never fires. Both produce a session that behaves
+    normally and records nothing, with no error anywhere to notice.
+    """
+    candidates = [config_path] if config_path is not None else _config_candidates()
+    found = next((path for path in candidates if path.is_file()), None)
+    if found is None:
+        return AdapterStatus(None, None, (), RECORDED_EVENTS, ())
+
+    try:
+        import yaml
+
+        parsed = yaml.safe_load(found.read_text(encoding="utf-8")) or {}
+    except Exception as error:  # any read, parse or import failure *is* the answer here
+        return AdapterStatus(found, f"{type(error).__name__}: {error}", (), RECORDED_EVENTS, ())
+
+    raw = parsed.get("hooks") if isinstance(parsed, dict) else None
+    hooks: dict[str, Any] = raw if isinstance(raw, dict) else {}
+    ours = tuple(
+        event
+        for event in hooks
+        if any(
+            "runopsy" in str(entry.get("command", ""))
+            for entry in hooks.get(event) or []
+            if isinstance(entry, dict)
+        )
+    )
+    return AdapterStatus(
+        config_path=found,
+        parse_error=None,
+        configured=ours,
+        missing=tuple(event for event in RECORDED_EVENTS if event not in ours),
+        never_fires=tuple(event for event in ours if event in PLUGIN_ONLY_EVENTS),
     )
 
 

@@ -8,6 +8,8 @@ license = "Apache-2.0"
 authors = [{ name = "Vahit Feryad", email = "vahit.feryat@gmail.com" }]
 dependencies = [
     "runopsy-core",
+    # Reading Hermes' own config to report whether it is wired to us.
+    "pyyaml>=6.0",
 ]
 
 [build-system]

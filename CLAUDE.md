@@ -12,7 +12,7 @@ The ten-item first sprint from section 24 of the design document is complete. Th
 
 Replay execution runs a counterfactual experiment in a sandbox copy; a supporting result upgrades a candidate to `replay_supported`, including creating one at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
 
-**Not built yet:** the React UI (`runopsy ui` serves an HTML view instead) · `runopsy graph` and `runopsy run` as separate commands · four of the design's API endpoints (`GET /v1/diagnoses/{id}`, `POST /v1/runs/{id}/replay`, the SSE stream, `POST /v1/export`) · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
+**Not built yet:** the React UI (`runopsy ui` serves an HTML view instead) · `runopsy run` (needs the runtime adapter driving the agent, not just wrapping a pipeline) · four of the design's API endpoints (`GET /v1/diagnoses/{id}`, `POST /v1/runs/{id}/replay`, the SSE stream, `POST /v1/export`) · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
 
 **The first real agent sessions were recorded on 31 July 2026** — live Hermes 0.19.0 runs captured through the shell hooks: two that succeeded (33 and 7 events) and one given a contradictory specification that ran 42 events and never finished. They found four things twenty synthetic cases had not, and they are the template for what real traces do to this engine:
 
@@ -31,7 +31,9 @@ A third change was tried and **reverted after measuring it.** A loop is attribut
 
 **Six real runs exist now**, and the engine behaves correctly on all of them: two clean successes produce **zero** findings, the 33-event success reports its three recovered patch failures and labels them recovered, the 42-event stuck run names the loop as its primary candidate, and two one-event runs killed by a provider error are reported as possibly interrupted at 13% confidence. The zero-false-positive invariant now has real traces behind it, not only synthetic ones.
 
-**Every major surface has now been exercised against a real recording, not only tests.** The local API serves real runs; `replay --execute` runs a real trace in a sandbox and reports a straight re-run as *inconclusive*, never as reproduction; `--skip-onset` applies a genuine intervention and reports *not supported* with both explanations left open; the replay child run is recorded with its lineage; and the semantic layer returns a real, capped, clearly-labelled judgement. The one surface that still disappoints is `runopsy evidence`, which shows only hashes for a Hermes step even with the vault populated — what evidence should reveal by default is a decision to take, not a bug to fix quietly.
+**Every major surface has now been exercised against a real recording, not only tests.** The local API serves real runs; `replay --execute` runs a real trace in a sandbox and reports a straight re-run as *inconclusive*, never as reproduction; `--skip-onset` applies a genuine intervention and reports *not supported* with both explanations left open; the replay child run is recorded with its lineage; and the semantic layer returns a real, capped, clearly-labelled judgement. `runopsy evidence` now prints the recorded command and output rather than only digests, withheld for steps flagged as sensitive unless `--include-sensitive` is passed, matching `export`. Reading that view is what exposed defect 6 above — the exit code sitting in the output body while the step above it claimed success.
+
+`runopsy graph` renders the run as a timeline in pure ASCII (a legacy Windows code page raises `UnicodeEncodeError` on box-drawing characters, and a diagnosis tool must not crash on the terminal it was asked to print to), with `--format dot` for Graphviz. Propagation is fetched from `infer_affects` rather than read off the graph, because normalization deliberately records no `AFFECTS` edges. `runopsy adapter hermes status` reports whether Hermes is really wired: it names an unparseable config, a missing hook, and a hook registered for a plugin-only event that will never fire — the three ways this integration fails silently.
 
 Six sessions are still not a corpus. All of them ran one model — `openai/gpt-4o-mini`, since the available OpenRouter key 404s on other families — on small single-file tasks, and none exercised handoff, memory, subagents or budget ceilings. Every headline number still comes from constructed traces, so prefer work that records more real runs over work that adds surface.
 
@@ -237,9 +239,10 @@ Implemented:
 runopsy record -s CMD ...                                # wrap any pipeline
 runopsy runs
 runopsy diagnose [RUN|latest] [--json] [--fail-on-finding] [--mode hybrid] [--budget-usd U]
-runopsy evidence [RUN|latest] --step N
+runopsy evidence [RUN|latest] --step N [--include-sensitive]
 runopsy replay  [RUN|latest] --from-step N [--model M]   # plans; --execute tests it
        [--execute] [--skip-onset | --substitute CMD]     # one intervention, sandbox copy
+runopsy graph   [RUN|latest] [--format text|dot] [-o FILE]
 runopsy export  [RUN|latest] [-o FILE] [--include-sensitive] [--otlp]
 runopsy ui                                               # loopback only
 runopsy prune [--apply]                                  # never expires anything on its own
@@ -247,11 +250,11 @@ runopsy bench [--compare] [--inject] [--perf] [--write PATH] [--verbose]
 runopsy setup                                            # key to the OS keyring
 runopsy doctor
 runopsy config [--init]
-runopsy adapter hermes                                   # config to paste
+runopsy adapter hermes [config|status]                   # paste, or check it took
 runopsy hook                                             # called by Hermes, not by hand
 ```
 
-Still to come, per the design document: `graph` (the HTML report and `ui` cover it for now), `run` (`record` covers wrapping a pipeline; a true `run` needs the runtime adapter driving the agent), and `adapter hermes status`.
+Still to come, per the design document: `run` — `record` wraps a pipeline, but a true `run` needs the runtime adapter driving the agent itself.
 
 Conventions worth preserving when adding commands: every command that reads or writes recorded runs takes `--store` (`setup`, `bench` and `config` do not, and should not — they touch the keyring, the synthetic corpus and `runopsy.toml` respectively); `latest` resolves to the most recently started run; findings never fail the command unless CI opts in; anything that could leak is redacted by default.
 

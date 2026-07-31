@@ -16,10 +16,18 @@ from rich.text import Text
 
 from runopsy_cli.language import confidence_phrase, gloss, heading, next_step_hint, style
 from runopsy_collector import PrunePlan, RunSummary
-from runopsy_core.schema import DiagnosisBundle, DiagnosisCandidate, RunOutcome, TraceGraph
+from runopsy_core.impact import infer_affects
+from runopsy_core.schema import (
+    DiagnosisBundle,
+    DiagnosisCandidate,
+    EdgeKind,
+    RunOutcome,
+    TraceGraph,
+)
 from runopsy_replay import ReplayPlan, ReplayVerdict, StepAction
 
 MAX_LISTED_CANDIDATES = 5
+MAX_LISTED_ARCS = 12
 DIGEST_PREVIEW = 14
 
 
@@ -360,6 +368,94 @@ def _payload_lines(text: str) -> list[str]:
     elif len(text) > MAX_PAYLOAD_CHARS:
         lines.append(f"… {len(text) - MAX_PAYLOAD_CHARS} more character(s)")
     return lines
+
+
+def causal_graph(bundle: DiagnosisBundle, graph: TraceGraph) -> RenderableType:
+    """The ``runopsy graph`` view: the run as a chain, with what reaches what.
+
+    A timeline is the honest shape for an agent run. The propagation arcs are the only
+    part that is inferred rather than recorded, so they are drawn as *may reach* and
+    carry their confidence — the same distinction the schema makes between DEPENDS_ON
+    and AFFECTS, kept visible instead of flattened into arrows that all look alike.
+    """
+    onset = bundle.primary.onset_node_id if bundle.primary else None
+    affected = set(bundle.primary.affected_node_ids) if bundle.primary else set()
+    flagged = {candidate.onset_node_id for candidate in bundle.candidates}
+
+    # ASCII markers throughout. A Windows console running a legacy code page raises
+    # UnicodeEncodeError on box-drawing characters, and a diagnosis tool that crashes
+    # on the terminal it was asked to print to is worse than one that looks plain.
+    body = Text()
+    for node in sorted(graph.nodes, key=lambda n: n.sequence):
+        if node.node_id == onset:
+            marker, colour = ">>", "yellow"
+        elif node.node_id == bundle.observed_failure_node_id:
+            marker, colour = "XX", "red"
+        elif node.node_id in affected:
+            marker, colour = " |", "dim"
+        elif node.node_id in flagged:
+            marker, colour = " o", "yellow"
+        else:
+            marker, colour = " .", "dim"
+        body.append(f"  {marker} ", style=colour)
+        body.append(f"{node.sequence:>3} ", style="dim")
+        body.append(f"{_one_line(node.label or node.kind.value)}\n", style=colour)
+
+    # Propagation is not in the graph: normalization records only what happened, and
+    # AFFECTS is inference produced by the impact layer. Asking for it here keeps that
+    # separation visible rather than quietly blending the two kinds of edge.
+    arcs = list(infer_affects(graph, onset)) if onset else []
+    if arcs:
+        body.append("\nMay reach  (inferred, not observed)\n", style="bold")
+        for edge in sorted(arcs, key=lambda e: e.confidence, reverse=True)[:MAX_LISTED_ARCS]:
+            body.append(
+                f"  {_describe(graph, edge.source_id)} -> {_describe(graph, edge.target_id)}"
+                f"  ({edge.confidence:.0%})\n",
+                style="dim",
+            )
+        if len(arcs) > MAX_LISTED_ARCS:
+            body.append(f"  ... {len(arcs) - MAX_LISTED_ARCS} more\n", style="dim")
+
+    legend = Text("\n>> suspected onset   XX observed failure   o other candidate\n", style="dim")
+    return Group(body, legend)
+
+
+def _one_line(text: str, limit: int = 58) -> str:
+    """Labels can be a whole repository path; the timeline needs one row per step."""
+    flat = " ".join(text.split())
+    return flat if len(flat) <= limit else flat[: limit - 3] + "..."
+
+
+def graph_dot(bundle: DiagnosisBundle, graph: TraceGraph) -> str:
+    """The same graph as Graphviz DOT, for anyone who wants to render it properly.
+
+    Inferred edges are dashed and labelled with their confidence. A reader who cannot
+    tell a recorded dependency from a guess has been given a worse picture than none.
+    """
+    onset = bundle.primary.onset_node_id if bundle.primary else None
+    inferred = list(infer_affects(graph, onset)) if onset else []
+    lines = ["digraph runopsy {", "  rankdir=TB;", '  node [shape=box, fontname="sans"];']
+    for node in sorted(graph.nodes, key=lambda n: n.sequence):
+        # Backslashes first: a Windows path in a label turns \U and \A into Graphviz
+        # escapes and the file will not parse.
+        label = _one_line(node.label or node.kind.value).replace("\\", "\\\\").replace('"', "'")
+        if node.node_id == onset:
+            attrs = ', style=filled, fillcolor="#ffe9a8"'
+        elif node.node_id == bundle.observed_failure_node_id:
+            attrs = ', style=filled, fillcolor="#ffc9c9"'
+        else:
+            attrs = ""
+        lines.append(f'  "{node.node_id}" [label="{node.sequence} {label}"{attrs}];')
+    for edge in [*graph.edges, *inferred]:
+        if edge.kind is EdgeKind.AFFECTS:
+            style = f' [style=dashed, label="may reach {edge.confidence:.0%}"]'
+        elif edge.kind is EdgeKind.PRECEDES:
+            style = " [color=gray]"
+        else:
+            style = f' [label="{edge.kind.value}"]'
+        lines.append(f'  "{edge.source_id}" -> "{edge.target_id}"{style};')
+    lines.append("}")
+    return "\n".join(lines) + "\n"
 
 
 def evidence(

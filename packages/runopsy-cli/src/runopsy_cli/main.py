@@ -168,6 +168,9 @@ def setup(
 @app.command()
 def adapter(
     runtime: Annotated[str, typer.Argument(help="Runtime to configure. Only 'hermes' today.")],
+    action: Annotated[
+        str, typer.Argument(help="'config' to print the hook block, or 'status' to check it.")
+    ] = "config",
     store: StoreOption = None,
 ) -> None:
     """Show how to connect a runtime to Runopsy.
@@ -178,6 +181,13 @@ def adapter(
     """
     if runtime != "hermes":
         errors.print(f"No adapter for {runtime!r}. Supported: hermes.", style="red")
+        raise typer.Exit(code=2)
+
+    if action == "status":
+        _adapter_status(store)
+        return
+    if action != "config":
+        errors.print(f"Unknown action {action!r}. Use 'config' or 'status'.", style="red")
         raise typer.Exit(code=2)
 
     target = Path(store).resolve() if store else None
@@ -199,6 +209,58 @@ def adapter(
         "shell dispatcher directly — so it is not evidence that the event arrives.",
         style="yellow",
     )
+
+
+def _adapter_status(store: Path | None) -> None:
+    """Report whether Hermes is really wired to Runopsy, and whether it has recorded.
+
+    Every failure this checks for is silent. A malformed hook block makes Hermes discard
+    its entire config and run with defaults; a hook registered for a plugin-only event
+    never fires. Both look exactly like a normal session that happened to record
+    nothing, which is not a state anyone should have to diagnose by hand.
+    """
+    status = hermes.adapter_status()
+
+    if status.config_path is None:
+        console.print("Hermes config: not found", style="yellow")
+        console.print(
+            "  Looked in the usual locations. Run 'runopsy adapter hermes' for the block\n"
+            "  to paste, and 'hermes config path' to see where it belongs.",
+            style="dim",
+        )
+    else:
+        console.print(f"Hermes config: {status.config_path}")
+
+    if status.parse_error:
+        console.print(f"  unreadable — {status.parse_error}", style="red")
+        console.print(
+            "  Hermes discards a config it cannot parse and runs with defaults, so the\n"
+            "  session records nothing while looking entirely normal.",
+            style="dim",
+        )
+
+    if status.configured:
+        console.print(f"  hooks wired to runopsy: {', '.join(sorted(status.configured))}")
+    if status.missing:
+        console.print(f"  missing: {', '.join(status.missing)}", style="yellow")
+    for event in status.never_fires:
+        console.print(
+            f"  {event}: configured, but Hermes only sends it to plugins — it will never fire",
+            style="yellow",
+        )
+
+    with Collector.open(store) as collector:
+        recorded = [run for run in collector.store.runs() if run.runtime == hermes.RUNTIME]
+    if recorded:
+        latest = recorded[0]
+        console.print(f"  recorded runs: {len(recorded)}, most recent {latest.run_id}")
+    else:
+        console.print("  recorded runs: none yet", style="yellow")
+
+    if status.is_wired and recorded:
+        console.print("\nWired and recording.", style="green")
+    elif status.is_wired:
+        console.print("\nWired. Run Hermes once, then 'runopsy runs'.", style="dim")
 
 
 @app.command()
@@ -412,6 +474,48 @@ def evidence(
             include_sensitive=include_sensitive,
         )
     )
+
+
+@app.command()
+def graph(
+    run: RunArgument = LATEST,
+    store: StoreOption = None,
+    output_format: Annotated[
+        str, typer.Option("--format", help="'text' for the terminal, or 'dot' for Graphviz.")
+    ] = "text",
+    output: Annotated[
+        Path | None, typer.Option("-o", "--output", help="Write to a file instead of stdout.")
+    ] = None,
+) -> None:
+    """Show the run as a causal graph: the chain of steps and what may have reached what.
+
+    Recorded structure and inferred propagation are drawn differently on purpose. A
+    reader who cannot tell an observed dependency from a guess has been handed a worse
+    picture than none at all.
+    """
+    if output_format not in {"text", "dot"}:
+        errors.print(f"Unknown format {output_format!r}. Use 'text' or 'dot'.", style="red")
+        raise typer.Exit(code=2)
+
+    with Collector.open(store) as collector:
+        run_id = _resolve_run(collector, run)
+        events = collector.events(run_id)
+        if not events:
+            errors.print(f"No events recorded for run {run_id}.", style="red")
+            raise typer.Exit(code=2)
+        context = AnalysisContext.from_events(run_id, events)
+        bundle = run_diagnosis(context)
+
+    if output_format == "dot":
+        document = render.graph_dot(bundle, context.graph)
+        if output is None:
+            typer.echo(document, nl=False)
+        else:
+            output.write_text(document, encoding="utf-8")
+            console.print(f"Wrote {output}.", style="dim")
+        return
+
+    console.print(render.causal_graph(bundle, context.graph))
 
 
 def _payload_digests(context: AnalysisContext) -> set[str]:

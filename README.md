@@ -118,17 +118,18 @@ reported as reproduction, never as causation.
 | `runopsy runs` | list recorded runs |
 | `runopsy diagnose [RUN]` | find the onset, the evidence and the propagation |
 | `runopsy diagnose --mode hybrid` | additionally ask a model about the suspicious steps |
-| `runopsy evidence --step N` | why one step was flagged and how it ranked |
+| `runopsy evidence --step N` | the command, the output, and why the step was flagged |
 | `runopsy replay --from-step N` | plan a controlled re-run; `--execute` tests it |
 | `runopsy export [-o FILE]` | a self-contained HTML report |
 | `runopsy export --otlp` | the same run as OpenInference-shaped OTLP JSON |
+| `runopsy graph` | the run as a timeline; `--format dot` for Graphviz |
+| `runopsy adapter hermes status` | check the runtime is really wired and recording |
 | `runopsy prune` | delete traces past the retention window |
 | `runopsy ui` | a local web view, loopback only |
 | `runopsy bench [--compare\|--inject]` | score the engine against labelled traces |
 | `runopsy config --init` | write a commented `runopsy.toml` |
 | `runopsy setup` | store a provider key in the OS keyring |
 | `runopsy doctor` | what is configured, without revealing any secret |
-| `runopsy adapter hermes` | configuration to connect a runtime |
 
 ## The optional paid layer
 
