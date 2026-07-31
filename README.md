@@ -22,7 +22,7 @@ Suspected onset  (where it may have started going wrong, unverified)
   may have affected step 10, step 11, step 12 and 2 more
 
   No cause has been confirmed. To test this candidate, replay from it:
-    runopsy replay run_0042 --from-step 9 --dry-run
+    runopsy replay run_0042 --from-step 9
 ```
 
 ## Does it actually work?

@@ -30,7 +30,9 @@ was failing to measure.
 
 from __future__ import annotations
 
+import re
 from datetime import timedelta
+from pathlib import Path
 
 from conftest import START, run_end, run_start
 from runopsy_cli import render
@@ -190,3 +192,49 @@ class TestASuccessfulRunIsNotDescribedAsAFailure:
         _, bundle = diagnosed(self.events(RunOutcome.SUCCESS))
 
         assert bundle.candidates
+
+
+class TestTheCommandWeOfferActuallyRuns:
+    """Diagnosis ends by offering the command that would test its own suspicion.
+
+    That command suggested `--dry-run` for two months. There is no such option — planning
+    is what `replay` does unless `--execute` is passed — so the one action offered to
+    turn a suspicion into something checkable failed with a usage error. Nothing caught
+    it, because every test asserted on the text of the hint rather than running it.
+    """
+
+    def bundle_and_store(self, tmp_path: Path) -> tuple[str, Path]:
+        from runopsy_collector import Collector
+
+        store = tmp_path / "store"
+        events = [
+            run_start(RUN, task="fix the bug"),
+            call(1, name="patch", arguments="sha256:" + "1" * 64, exit_code=1),
+            call(2, name="pytest", arguments="sha256:" + "2" * 64, exit_code=1),
+            run_end(3, RUN, outcome=RunOutcome.FAILURE),
+        ]
+        with Collector.open(store) as collector:
+            collector.record_all(events)
+        return RUN, store
+
+    def test_the_suggested_replay_command_is_a_valid_invocation(self, tmp_path: Path) -> None:
+        from typer.testing import CliRunner
+
+        from runopsy_cli.main import app
+
+        run_id, store = self.bundle_and_store(tmp_path)
+        runner = CliRunner()
+
+        diagnosis = runner.invoke(app, ["diagnose", run_id, "--store", str(store)])
+        assert diagnosis.exit_code == 0, diagnosis.output
+
+        # The hint is rendered inside a Rich panel, so strip the box drawing around it.
+        match = re.search(r"runopsy replay [^|│\n]*", diagnosis.output)
+        assert match, diagnosis.output
+        suggested = match.group(0).strip()
+        arguments = [*suggested.split()[1:], "--store", str(store)]
+
+        replayed = runner.invoke(app, arguments)
+
+        assert replayed.exit_code == 0, f"{suggested!r} failed:\n{replayed.output}"
+        assert "No such option" not in replayed.output

@@ -304,7 +304,7 @@ def render_report(
             '<div class="note">No cause has been confirmed. Nothing here is proof of '
             "causation — the propagation arcs show reachability, not a demonstrated "
             "effect. To test the suspected onset, replay from it:<br>"
-            f"<code>runopsy replay {escape(bundle.run_id)}{escape(step)} --dry-run</code></div>"
+            f"<code>runopsy replay {escape(bundle.run_id)}{escape(step)}</code></div>"
         )
 
     if redact:

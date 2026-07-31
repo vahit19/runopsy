@@ -77,10 +77,13 @@ def next_step_hint(run_id: str, candidate: DiagnosisCandidate, step: int | None)
     """
     if candidate.is_definitive:
         return ""
+    # Planning is what `replay` does by default; executing takes an explicit --execute.
+    # This once suggested a --dry-run flag that does not exist, so the one command the
+    # output offers to make certainty cheap failed with a usage error.
     target = f" --from-step {step}" if step is not None else ""
     return (
         "No cause has been confirmed. To test this candidate, replay from it:\n"
-        f"  runopsy replay {run_id}{target} --dry-run"
+        f"  runopsy replay {run_id}{target}"
     )
 
 
