@@ -48,3 +48,8 @@ node_modules/
 # time. Not committed: a source checkout falls back to the server-rendered index, so the
 # Python side never needs a Node toolchain to be useful.
 packages/runopsy-server/src/runopsy_server/static/
+
+# The design document is the owner's private paper, removed from the repository on
+# purpose. Ignored so it cannot be committed back by accident.
+runopsy-proje-tasarim-belgesi.pdf
+*.pdf

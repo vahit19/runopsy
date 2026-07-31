@@ -17,5 +17,6 @@ Elsewhere in the repository:
   accuracy, including the cases the engine misses
 - [`SECURITY.md`](../SECURITY.md) — reporting something exploitable
 
-The design document (`runopsy-proje-tasarim-belgesi.pdf`, Turkish) remains the source of
-truth for anything these pages do not cover.
+The Turkish design document this project was built from is the owner's private document
+and is not distributed. [`CLAUDE.md`](../CLAUDE.md) carries the decisions it settled, in
+English, along with the reasoning — which is what a contributor needs anyway.
