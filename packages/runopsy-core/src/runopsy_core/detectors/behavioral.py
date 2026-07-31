@@ -14,6 +14,7 @@ from typing import ClassVar
 from runopsy_core.detectors.base import AnalysisContext, signal_id
 from runopsy_core.schema import (
     AnalysisLayer,
+    CallStatus,
     ClaimEvent,
     FailureCategory,
     FailureSignal,
@@ -62,27 +63,42 @@ class RetryStormDetector:
 
 
 class ToolLoopDetector:
-    """The same call repeated with the same arguments.
+    """The same call repeated with the same arguments, getting nowhere.
 
-    Identical arguments are the tell that distinguishes a loop from legitimate
-    repetition: running the test suite four times while fixing it is progress, running
-    it four times with an unchanged command and unchanged inputs is not.
+    Identical arguments alone do not make a loop, and treating them as one was wrong in
+    the most ordinary case there is: an agent fixing a bug runs the same verification
+    command after every edit. The command never changes — what changes is the file on
+    disk, which an argument hash cannot see. On the first real Hermes session recorded,
+    that pattern fired at HIGH severity on a run that succeeded, and outranked the steps
+    that had actually failed.
+
+    So repetition has to be shown to be *unproductive* before it counts. The output is
+    what reveals that: differing results mean the world moved between calls and the
+    agent is making progress. Repetition is a loop when the calls keep failing, or when
+    they keep returning the very same answer.
+
+    When no output was recorded at all, there is nothing to judge progress by, and the
+    detector falls back to counting arguments as before — that is the weaker signal, but
+    silence about a possible loop is worse than a candidate the ranker can weigh.
     """
 
     name = "behavioral:tool_loop"
     layer = LAYER
 
     def detect(self, context: AnalysisContext) -> Iterable[FailureSignal]:
-        occurrences: dict[tuple[str, str], list[str]] = defaultdict(list)
+        occurrences: dict[tuple[str, str], list[ToolCallEvent]] = defaultdict(list)
         for event in context.of_kind(ToolCallEvent):
             if event.tool.arguments_hash is None:
                 continue
-            occurrences[(event.tool.name, event.tool.arguments_hash)].append(event.event_id)
+            occurrences[(event.tool.name, event.tool.arguments_hash)].append(event)
 
         threshold = context.settings.loop_threshold
-        for (tool_name, _), node_ids in occurrences.items():
-            if len(node_ids) < threshold:
+        for (tool_name, _), events in occurrences.items():
+            if len(events) < threshold:
                 continue
+            if not self._is_stuck(events):
+                continue
+            node_ids = [event.event_id for event in events]
             yield FailureSignal(
                 signal_id=signal_id(self.name, node_ids[0]),
                 node_id=node_ids[0],
@@ -95,6 +111,22 @@ class ToolLoopDetector:
                 ),
                 evidence_node_ids=tuple(node_ids),
             )
+
+    @staticmethod
+    def _is_stuck(events: list[ToolCallEvent]) -> bool:
+        """Whether repeating the call achieved nothing."""
+        if all(_tool_failed(event) for event in events):
+            return True
+        outputs = {event.tool.output_hash for event in events}
+        if outputs == {None}:
+            return True  # nothing recorded to judge progress by
+        return len(outputs) <= 1
+
+
+def _tool_failed(event: ToolCallEvent) -> bool:
+    return event.tool.status is CallStatus.ERROR or (
+        event.tool.exit_code is not None and event.tool.exit_code != 0
+    )
 
 
 class StateFlappingDetector:

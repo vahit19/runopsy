@@ -14,7 +14,7 @@ from rich.text import Text
 
 from runopsy_cli.language import confidence_phrase, gloss, heading, next_step_hint, style
 from runopsy_collector import PrunePlan, RunSummary
-from runopsy_core.schema import DiagnosisBundle, DiagnosisCandidate, TraceGraph
+from runopsy_core.schema import DiagnosisBundle, DiagnosisCandidate, RunOutcome, TraceGraph
 from runopsy_replay import ReplayPlan, ReplayVerdict, StepAction
 
 MAX_LISTED_CANDIDATES = 5
@@ -133,9 +133,20 @@ def diagnosis(
         )
         return Group(*parts)
 
+    # A run can end successfully with failed steps inside it — an agent that retries and
+    # recovers is the ordinary case, not an anomaly. Calling that "what the run visibly
+    # got wrong" overstates it: the run got nothing wrong, a step did. The first real
+    # session recorded ended in success with three failed patches in the middle of it.
+    recovered = (
+        summary is not None and summary.is_finished and summary.outcome is RunOutcome.SUCCESS
+    )
     if bundle.observed_failure_node_id is not None:
-        observed = Text("\nObserved failure", style="bold red")
-        observed.append("  (what the run visibly got wrong)\n", style="dim")
+        if recovered:
+            observed = Text("\nRecovered failure", style="bold yellow")
+            observed.append("  (the run succeeded; this step did not)\n", style="dim")
+        else:
+            observed = Text("\nObserved failure", style="bold red")
+            observed.append("  (what the run visibly got wrong)\n", style="dim")
         observed.append(f"  {_describe(graph, bundle.observed_failure_node_id)}\n", style="bold")
         observed.append(f"  {bundle.observed_failure_summary}\n")
         parts.append(observed)

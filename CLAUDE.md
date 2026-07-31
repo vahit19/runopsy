@@ -14,7 +14,13 @@ Replay execution runs a counterfactual experiment in a sandbox copy; a supportin
 
 **Not built yet:** the React UI (`runopsy ui` serves an HTML view instead) · `runopsy graph` and `runopsy run` as separate commands · four of the design's API endpoints (`GET /v1/diagnoses/{id}`, `POST /v1/runs/{id}/replay`, the SSE stream, `POST /v1/export`) · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
 
-**The gap that matters most is none of those.** No Runopsy component has ever recorded a real agent run. Every number in this file comes from constructed traces, and the engine has never seen a trace it did not help write. The Hermes adapter is verified against the documented wire protocol, not against a live session. Treat accuracy claims accordingly, and prefer work that closes this over work that adds surface.
+**The first real agent session was recorded on 31 July 2026** — a live Hermes 0.19.0 run fixing an ordinary bug, 33 events, captured through the shell hooks. It immediately found three things twenty synthetic cases had not, and they are the template for what real traces do to this engine:
+
+1. The loop detector fired on the edit-verify cycle. The agent re-ran its verification command after every edit; the command never changed, the file on disk did, and an argument hash cannot see a file. Seven identical calls read as *stuck* and outranked the steps that had actually failed. Fixed by requiring repetition to be unproductive — see `tests/test_real_run.py`.
+2. A run that **succeeded** was described as having an "observed failure", because three patches failed and were recovered from mid-run. Real agents fail and recover constantly; synthetic traces do not.
+3. **No `llm_call` events were captured at all.** Hermes did not fire `post_llm_call` during a normal session, though the hook is configured and our handler maps its payload correctly when fired (verify with `hermes hooks test post_llm_call`). So real Hermes traces currently carry no token counts, cost or model latency, and the budget detector is blind on them. This is the next thing to chase upstream.
+
+One session is not a corpus. Every headline number still comes from constructed traces, so prefer work that records more real runs over work that adds surface.
 
 **Keep this section true.** It is the first thing read and the easiest thing to leave stale; a wrong "not built yet" costs a future session real time. If a change ships a capability listed here as missing, move it in the same commit.
 
@@ -250,7 +256,7 @@ Storage split: structured events → DuckDB · raw event stream → append-only 
 
 **MVP acceptance criteria (section 18.1)** — in offline mode zero external model calls; at least eight deterministic detectors working end to end; diagnosis JSON carrying evidence, confidence and affected nodes per candidate; dry-run plans for rollback and fork; risky external side-effect replay blocked by default; 2D timeline and causal graph sharing the same trace node IDs; reproducible benchmark report; one-command local demo.
 
-**First sprint (section 24): complete.** The Hermes adapter is built and verified against hermes-agent 0.19.0's documented shell-hook wire protocol — but verified against the protocol is not the same as observed in a session, and no live run has ever been recorded. Every number in this file comes from constructed traces, and the engine has never seen a trace it did not help write. That remains the next thing that matters; adding surface before closing it makes the claims broader without making them better.
+**First sprint (section 24): complete**, including item 1 — the Hermes adapter now has a live session behind it, not just the documented protocol. See *Project status* for what that session immediately broke. Every headline number still comes from constructed traces, so accumulating real runs remains worth more than adding surface.
 
 Priority rule: event capture and schema correctness first, then the deterministic engine, then evidence/2D UX, then replay and semantic evaluation, and 3D/cloud last.
 

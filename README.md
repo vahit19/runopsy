@@ -46,6 +46,15 @@ work. That needs fault injection on real workloads and a measured reduction in
 time-to-diagnosis. The full report, including the cases the engine still misses and the
 failures it cannot see at all, is in [`benchmarks/baseline-report.md`](benchmarks/baseline-report.md).
 
+How much that gap matters is not a guess. The first real agent session recorded — a live
+Hermes run fixing an ordinary bug — broke the engine in a way none of the twenty cases
+had: the agent re-ran its verification command after every edit, and the loop detector
+read seven identical calls as being stuck, outranking the steps that had actually failed.
+Synthetic traces only ever repeat a call when something *is* stuck, so "same arguments"
+and "making no progress" were never distinguishable in them. Both the fix and the
+regressions are in `tests/test_real_run.py`. Expect more of this as real runs accumulate,
+and read the table above as measuring the ranking rather than the product.
+
 ## Install
 
 Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
