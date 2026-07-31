@@ -16,9 +16,9 @@ import { useSelection } from "./store";
 
 // Nodes are 210 wide; the gap between columns has to hold a "may reach 42%" label
 // without it colliding with the box beside it.
-const COLUMN = 300;
+const COLUMN = 330;
 const ROW = 82;
-const MAX_LABEL = 30;
+const MAX_LABEL = 26;
 
 /** One line that fits the box.
  *
@@ -53,11 +53,31 @@ function roleOf(
   return "plain";
 }
 
+/** Styling carries the reading order, because fifty near-identical boxes do not.
+ *
+ * A user looking at a fifty-step run said the map told them nothing, and they were
+ * right: every step had the same weight, so the two that matter were lost among the
+ * forty-eight that do not. The marked steps are now larger, bolder and darker, and the
+ * ordinary ones are deliberately faint — a step nobody needs to read should not compete
+ * with the one they do.
+ */
 const STYLES: Record<string, React.CSSProperties> = {
-  onset: { background: "#fff6d8", border: "2px solid #c8951a", fontWeight: 600 },
-  failure: { background: "#ffe1e1", border: "2px solid #c0392b", fontWeight: 600 },
-  affected: { background: "#f4f4f6", border: "1px solid #b9b9c4" },
-  plain: { background: "#ffffff", border: "1px solid #d8d8e0" },
+  onset: {
+    background: "#ffe9a8",
+    border: "3px solid #b8860b",
+    fontWeight: 700,
+    color: "#4a3600",
+    fontSize: 13,
+  },
+  failure: {
+    background: "#ffd0d0",
+    border: "3px solid #b0281a",
+    fontWeight: 700,
+    color: "#5c1410",
+    fontSize: 13,
+  },
+  affected: { background: "#fdf6e6", border: "1px solid #d8b878", color: "#6b5a30" },
+  plain: { background: "#fbfbfd", border: "1px solid #e6e6ee", color: "#9a9aa8" },
 };
 
 export function FailureMap({ graph, onset, observedFailureNodeId }: Props) {
@@ -78,7 +98,16 @@ export function FailureMap({ graph, onset, observedFailureNodeId }: Props) {
               x: (index % 4) * COLUMN,
               y: Math.floor(index / 4) * ROW,
             },
-            data: { label: `${node.sequence}  ${fitLabel(node.label || node.kind)}` },
+            // The two steps that matter say what they are, in words. A colour is only
+            // legible to someone who has already read the legend; a label is not.
+            data: {
+              label:
+                role === "onset"
+                  ? `STARTED HERE - step ${node.sequence} ${fitLabel(node.label || node.kind)}`
+                  : role === "failure"
+                    ? `FAILED HERE - step ${node.sequence} ${fitLabel(node.label || node.kind)}`
+                    : `${node.sequence}  ${fitLabel(node.label || node.kind)}`,
+            },
             title: node.label || node.kind,
             style: {
               ...STYLES[role],
@@ -90,7 +119,7 @@ export function FailureMap({ graph, onset, observedFailureNodeId }: Props) {
               overflow: "hidden",
               textOverflow: "ellipsis",
               fontSize: 12,
-              width: 210,
+              width: role === "onset" || role === "failure" ? 268 : 214,
               outline: node.node_id === focused ? "3px solid #4a6cf7" : undefined,
             },
           };
@@ -120,17 +149,39 @@ export function FailureMap({ graph, onset, observedFailureNodeId }: Props) {
   }, [graph.edges, graph.inferred_edges]);
 
   return (
-    <div style={{ height: "100%", border: "1px solid #e2e2ea", borderRadius: 8 }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodeClick={(_, node) => focusNode(node.id)}
-        fitView
-        proOptions={{ hideAttribution: false }}
-      >
-        <Background />
-        <Controls />
-      </ReactFlow>
+    <div className="mapframe">
+      <div className="maphint">
+        Each box is one step, in order. The run <b>failed</b> at the red box — it{" "}
+        <b>started going wrong</b> at the amber one. Dashed amber lines are what that
+        step <i>may</i> have reached: inference, not something observed. Click any step
+        to see what it recorded.
+      </div>
+      <div className="mapcanvas">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodeClick={(_, node) => focusNode(node.id)}
+          fitView
+          proOptions={{ hideAttribution: false }}
+        >
+          <Background />
+          <Controls />
+        </ReactFlow>
+      </div>
+      <div className="maplegend">
+        <span>
+          <i className="swatch onset" /> started going wrong
+        </span>
+        <span>
+          <i className="swatch failure" /> visible failure
+        </span>
+        <span>
+          <i className="swatch affected" /> may have been affected
+        </span>
+        <span>
+          <i className="swatch plain" /> nothing found here
+        </span>
+      </div>
     </div>
   );
 }

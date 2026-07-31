@@ -179,6 +179,11 @@ export default function FailureMap3D({
     [onset],
   );
 
+  const stepOf = (id: string | null | undefined): number | null =>
+    ordered.find((node) => node.node_id === id)?.sequence ?? null;
+  const onsetStep = stepOf(onset?.onset_node_id);
+  const failureStep = stepOf(observedFailureNodeId);
+
   const arcs = useMemo(() => {
     if (!onset) return [];
     const from = indexById.get(onset.onset_node_id);
@@ -216,10 +221,21 @@ export default function FailureMap3D({
           position={[0, 0, (-ordered.length * STEP_SPACING) / 2]}
         />
       </Canvas>
-      <p className="gloss dim3d">
-        solid&nbsp;=&nbsp;recorded step · translucent arc&nbsp;=&nbsp;inferred, may have
-        reached · height&nbsp;=&nbsp;severity of what was found there
-      </p>
+      <div className="caption3d">
+        <p>
+          The run reads left to right, one block per step. It{" "}
+          <b className="amber">started going wrong</b> at the tall amber block
+          {onsetStep !== null ? ` (step ${onsetStep})` : ""} and{" "}
+          <b className="red">failed visibly</b> at the red one
+          {failureStep !== null ? ` (step ${failureStep})` : ""}. Height is how serious
+          the finding was, so a healthy run is a flat road.
+        </p>
+        <p className="gloss">
+          A translucent arc is inference — what the onset <i>may</i> have reached — never
+          something observed. For a run this long the 2D map is easier to read; this view
+          is here for the shape of a run, not for reading individual steps.
+        </p>
+      </div>
     </div>
   );
 }

@@ -68,3 +68,35 @@ ul { margin: 4px 0; padding-left: 18px; font-size: 12px; }
 .map3d { height: 100%; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .map3d canvas { flex: 1; }
 .dim3d { margin: 0; padding: 6px 10px; background: #101319; color: #8a93a6; }
+
+/* The map, with the words a first-time reader needs around it. A colour key nobody
+   was given is a colour key nobody can read. */
+.mapframe {
+  height: 100%; display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff;
+}
+.maphint {
+  padding: 8px 12px; font-size: 12px; line-height: 1.5; color: #45454f;
+  background: #f7f8fb; border-bottom: 1px solid var(--line);
+}
+.maphint b { color: #1c1c22; }
+.mapcanvas { flex: 1; min-height: 0; }
+.maplegend {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  padding: 7px 12px; font-size: 12px; color: var(--dim);
+  border-top: 1px solid var(--line); background: #fbfbfd;
+}
+.maplegend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.swatch.onset { background: #ffe9a8; border: 2px solid #b8860b; }
+.swatch.failure { background: #ffd0d0; border: 2px solid #b0281a; }
+.swatch.affected { background: #fdf6e6; border: 1px solid #d8b878; }
+.swatch.plain { background: #fbfbfd; border: 1px solid #e6e6ee; }
+
+/* The 3D caption. Without it the view is a row of coloured blocks and no way to know
+   which is which — a picture that needs a person beside it to explain is not finished. */
+.caption3d { padding: 8px 12px; background: #101319; border-top: 1px solid #232833; }
+.caption3d p { margin: 0 0 4px; font-size: 12px; line-height: 1.5; color: #c3c9d6; }
+.caption3d p.gloss { color: #7f8798; margin-bottom: 0; }
+.caption3d .amber { color: #e0a92a; }
+.caption3d .red { color: #e2685c; }
