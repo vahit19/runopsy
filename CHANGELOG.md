@@ -5,6 +5,32 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-07-31
+
+First release. The deterministic pipeline works end to end: record a run, find where it
+started going wrong, read the evidence, test the suspicion with a counterfactual replay,
+and score the whole thing against labelled traces.
+
+Install with `uv tool install runopsy`, `pipx install runopsy` or `pip install runopsy`.
+Everything works offline with no provider key.
+
+**Measured**, reproducible with `runopsy bench --compare`: onset top-1 94.4%, top-3
+100%, mean step distance 0.11, false positives 0.0% — against 22.2% for blaming the last
+failing step, which is what reading a log bottom-up achieves. These are twenty synthetic
+single-fault traces; they show the ranking behaves as designed and do not yet show it
+saves anyone time on real work. `runopsy label` exists so that changes.
+
+**Eleven packages.** `runopsy` (the meta-distribution) · core · collector · cli · replay
+· bench · adapter · semantic · server · ui · inspect.
+
+**Sixteen commands**, including `run` (drive an agent and diagnose it in one), `label`
+(turn a real failure into a benchmark case), `graph`, and `adapter hermes plugin`.
+
+**What it will not do**: claim a cause it has not validated, send anything anywhere
+without `--mode hybrid`, execute a replay outside a disposable sandbox, or report a
+finding on a healthy run.
+
+
 ### Added
 - **Replay execution.** `runopsy replay --execute` runs the replayable steps of a plan
   in a disposable sandbox copy of the project. With `--skip-onset` or `--substitute`

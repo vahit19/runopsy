@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -616,6 +617,128 @@ def run(
 
 
 @app.command()
+def label(
+    run: RunArgument = LATEST,
+    onset: Annotated[
+        int | None,
+        typer.Option("--onset", help="The step where it actually started going wrong."),
+    ] = None,
+    healthy: Annotated[
+        bool, typer.Option("--healthy", help="Label this run as having nothing wrong.")
+    ] = False,
+    by: Annotated[str | None, typer.Option("--by", help="Who is making this claim.")] = None,
+    category: Annotated[
+        str, typer.Option("--category", help="Failure taxonomy category (design section 9).")
+    ] = "undetermined",
+    name: Annotated[
+        str | None, typer.Option("--name", help="Case name. Defaults to the run id.")
+    ] = None,
+    describe: Annotated[str, typer.Option("--describe", help="One line: what went wrong.")] = "",
+    affected: Annotated[
+        str, typer.Option("--affected", help="Comma-separated steps the onset broke.")
+    ] = "",
+    notes: Annotated[str, typer.Option("--notes", help="Anything a reviewer should know.")] = "",
+    out: Annotated[
+        Path | None,
+        typer.Option("-o", "--output", help="Where to write. Defaults to benchmarks/labelled/."),
+    ] = None,
+    store: StoreOption = None,
+) -> None:
+    """Record where a run *actually* went wrong, as a labelled benchmark case.
+
+    This is how the corpus grows, and the corpus is the part of this project that cannot
+    be copied: anyone can rebuild a graph view, nobody can rebuild a body of real agent
+    failures where a person has said which step was the cause.
+
+    The label is your claim, not the engine's. Nothing here reads what `diagnose` found,
+    because a corpus scored against the engine's own opinion measures nothing — it would
+    only ever confirm what the engine already believes.
+
+    Nothing but hashes leaves your machine: a case carries the same digests the trace
+    does and no payload text, so contributing a failure is not contributing your source.
+    """
+    from runopsy_bench import LabelError, carries_payload_text, label_run, to_json
+    from runopsy_core.schema import FailureCategory
+
+    if onset is None and not healthy:
+        errors.print(
+            "Pass --onset N to say where it went wrong, or --healthy if nothing did.\n"
+            "  runopsy diagnose  shows the steps; the label is your call, not its.",
+            style="red",
+        )
+        raise typer.Exit(code=2)
+    if onset is not None and healthy:
+        errors.print("--onset and --healthy contradict each other.", style="red")
+        raise typer.Exit(code=2)
+
+    labeller = by or os.environ.get("RUNOPSY_LABELLER") or ""
+    if not labeller.strip():
+        errors.print(
+            "Pass --by 'Your Name' (or set RUNOPSY_LABELLER).\n"
+            "  An unattributed label is a claim nobody stands behind.",
+            style="red",
+        )
+        raise typer.Exit(code=2)
+
+    try:
+        chosen = FailureCategory(category)
+    except ValueError:
+        allowed = ", ".join(item.value for item in FailureCategory)
+        errors.print(f"Unknown category {category!r}. One of: {allowed}", style="red")
+        raise typer.Exit(code=2) from None
+
+    with Collector.open(store) as collector:
+        run_id = _resolve_run(collector, run)
+        events = collector.events(run_id)
+        if not events:
+            errors.print(f"No events recorded for run {run_id}.", style="red")
+            raise typer.Exit(code=2)
+        summary = collector.store.run(run_id)
+        runtime = summary.runtime if summary is not None else ""
+
+    steps = {int(part) for part in affected.replace(" ", "").split(",") if part}
+    try:
+        case = label_run(
+            list(events),
+            name=name or run_id,
+            category=chosen,
+            description=describe or f"labelled from {run_id}",
+            onset_step=None if healthy else onset,
+            affected_steps=steps,
+            labelled_by=labeller,
+            runtime=runtime or "",
+            notes=notes,
+        )
+    except LabelError as error:
+        errors.print(str(error), style="red")
+        raise typer.Exit(code=2) from error
+
+    if carries_payload_text(case):
+        errors.print(
+            "This trace carries what looks like payload text rather than hashes.\n"
+            "Refusing to write it: a case is meant to be shareable.",
+            style="red",
+        )
+        raise typer.Exit(code=1)
+
+    destination = out or Path("benchmarks") / "labelled" / f"{case.name}.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(to_json(case), encoding="utf-8")
+
+    console.print(f"Wrote {destination}.")
+    console.print(
+        f"  {len(case.events)} events · "
+        f"{'healthy' if case.onset_step is None else f'onset at step {case.onset_step}'} · "
+        f"labelled by {case.labelled_by}",
+        style="dim",
+    )
+    console.print(
+        "\nScore the engine against it:\n  runopsy bench --corpus benchmarks/labelled",
+        style="dim",
+    )
+
+
+@app.command()
 def graph(
     run: RunArgument = LATEST,
     store: StoreOption = None,
@@ -979,12 +1102,24 @@ def bench(
         Path | None,
         typer.Option("--write", help="Write a Markdown comparison report to this path."),
     ] = None,
+    corpus: Annotated[
+        Path | None,
+        typer.Option("--corpus", help="Score labelled real runs from this directory instead."),
+    ] = None,
 ) -> None:
-    """Score the engine against labelled synthetic traces.
+    """Score the engine against labelled traces.
 
-    Reproducible and offline: the suite is generated, not sampled, so the same code
-    always produces the same numbers and a regression is visible immediately.
+    The built-in suite is generated, not sampled, so the same code always produces the
+    same numbers and a regression is visible immediately.
+
+    ``--corpus`` scores human-labelled *real* runs instead — see ``runopsy label``. That
+    is the number that eventually matters: synthetic cases prove the ranking behaves as
+    designed, and only real ones show whether it helps.
     """
+    if corpus is not None:
+        _report_corpus(corpus)
+        return
+
     if perf:
         _report_performance()
         return
@@ -1138,6 +1273,41 @@ def _report_injections() -> None:
             "excluded. Reaching those needs semantic analysis or a replay.",
             style="dim",
         )
+
+
+def _report_corpus(directory: Path) -> None:
+    """Score the engine over human-labelled real runs."""
+    from runopsy_bench import load_corpus, run_benchmark
+
+    cases = load_corpus(directory)
+    if not cases:
+        errors.print(
+            f"No labelled cases in {directory}.\n"
+            "  Record a run, then: runopsy label latest --onset N --by 'Your Name'",
+            style="yellow",
+        )
+        raise typer.Exit(code=2)
+
+    report = run_benchmark(tuple(case.as_case() for case in cases))
+    console.print(f"Scored {len(cases)} labelled real run(s) from {directory}.\n", style="dim")
+
+    table = Table(box=None, pad_edge=False, header_style="bold")
+    table.add_column("metric")
+    table.add_column("value", justify="right")
+    table.add_row("onset top-1 accuracy", f"{report.top1_accuracy:.1%}")
+    table.add_row("onset top-3 recall", f"{report.top3_recall:.1%}")
+    table.add_row("mean step distance", f"{report.mean_step_distance:.2f}")
+    table.add_row("false positive rate", f"{report.false_positive_rate:.1%}")
+    console.print(table)
+
+    labellers = sorted({case.labelled_by for case in cases if case.labelled_by})
+    if labellers:
+        console.print(f"\nLabelled by: {', '.join(labellers)}", style="dim")
+    console.print(
+        "These are human labels on real runs, so the number is the one that counts — "
+        "and it is only as good as the labels behind it.",
+        style="dim",
+    )
 
 
 def _report_performance() -> None:

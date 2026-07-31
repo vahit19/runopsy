@@ -158,10 +158,27 @@ reported as reproduction, never as causation.
 | `runopsy-inspect import LOG` | read an Inspect AI eval log into a trace |
 | `runopsy prune` | delete traces past the retention window |
 | `runopsy ui` | the React timeline and failure map (optional 3D), loopback only |
-| `runopsy bench [--compare\|--inject]` | score the engine against labelled traces |
+| `runopsy label --onset N` | record where a run actually went wrong, as a case |
+| `runopsy bench [--compare\|--corpus DIR]` | score the engine against labelled traces |
 | `runopsy config --init` | write a commented `runopsy.toml` |
 | `runopsy setup` | store a provider key in the OS keyring |
 | `runopsy doctor` | what is configured, without revealing any secret |
+
+## Growing the corpus
+
+The accuracy table above comes from synthetic traces. The number that will eventually
+matter comes from real ones, and that corpus only grows by being used:
+
+```bash
+runopsy label latest --onset 9 --by "Your Name" \
+  --category tool_execution --describe "wrote the config for the wrong environment"
+runopsy bench --corpus benchmarks/labelled
+```
+
+A case is JSON carrying the same hashes the trace carries and no payload text, so
+contributing a failure is not contributing your source code. The label is your claim,
+with your name on it — nothing reads what `diagnose` already found, because a corpus
+scored against the engine's own opinion would only confirm what it already believes.
 
 ## The optional paid layer
 

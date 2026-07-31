@@ -12,7 +12,9 @@ The ten-item first sprint from section 24 of the design document is complete. Th
 
 Replay execution runs a counterfactual experiment in a sandbox copy; a supporting result upgrades a candidate to `replay_supported`, including creating one at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
 
-**Not built yet:** the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
+**Not built yet:** PyPI publication, see `RELEASING.md`.
+
+The opt-in real-run corpus (section 17.1 layer four) now has its mechanism: `runopsy label` turns a recorded run into a JSON case carrying the trace's hashes and no payload text, and `runopsy bench --corpus DIR` scores against those instead of the synthetic suite. The corpus itself only grows by being used. Two rules are enforced rather than documented: a label needs a named human (`labelled_by`), and nothing reads what `diagnose` found — a corpus scored against the engine's own opinion would only confirm what it already believes.
 
 The 3D view exists and keeps its designed place: optional, lazy-loaded (Three.js lives in its own chunk nobody downloads without clicking the toggle), never the default. Depth carries time, height carries severity, and inference stays visually weaker than record — propagation is a translucent arc, because a guess must not become more convincing for having been drawn in 3D.
 
@@ -258,7 +260,8 @@ runopsy graph   [RUN|latest] [--format text|dot] [-o FILE]
 runopsy export  [RUN|latest] [-o FILE] [--include-sensitive] [--otlp]
 runopsy ui                                               # loopback only
 runopsy prune [--apply]                                  # never expires anything on its own
-runopsy bench [--compare] [--inject] [--perf] [--write PATH] [--verbose]
+runopsy label  [RUN|latest] --onset N --by NAME [--healthy] [--category C]
+runopsy bench [--compare] [--corpus DIR] [--inject] [--perf] [--write PATH]
 runopsy setup                                            # key to the OS keyring
 runopsy doctor
 runopsy config [--init]
