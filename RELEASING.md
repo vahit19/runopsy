@@ -63,6 +63,27 @@ configuration has already been registered for a different project name"*.
 Owner is your GitHub account, Repository name is `runopsy`, and Workflow name is
 `release.yml` on every one of them.
 
+### Three at a time
+
+A fresh PyPI account may hold only **three pending publishers at once** — adding a
+fourth is refused. That is not a problem, only a rhythm, because a pending publisher
+stops being pending the moment its project exists:
+
+1. Register three (start with `runopsy`, `runopsy-core`, `runopsy-collector`).
+2. Push the tag. Those three projects are created; their publishers become ordinary
+   ones and three pending slots come free. The other seven jobs go red with an
+   invalid-publisher error, which is expected and says exactly which package it was.
+3. Register the next three, re-run the release from the Actions tab.
+4. Repeat until all ten exist.
+
+Re-running is safe: the publish step passes `skip-existing`, so packages already
+uploaded are stepped over rather than treated as a failure. PyPI still refuses to
+replace a file that exists, whatever the flag says — a version number is spent once.
+
+Order matters only for the first round. `runopsy` is the name everyone will guess and
+the page above says plainly that registering it does **not** reserve it, so it goes out
+before anything else.
+
 Register `runopsy` first. Configuring a pending publisher does **not** reserve the name
 — PyPI says so on that page — and `runopsy` is the only name anyone will guess.
 

@@ -141,3 +141,14 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: upload/
+          # A fresh PyPI account may hold only three *pending* publishers at a time, so
+          # the first release goes out in rounds: register three, run this, watch those
+          # projects come into existence — which turns their pending publishers into
+          # ordinary ones and frees the slots — then register the next three and run it
+          # again. Without this flag the second run would abort on the packages already
+          # uploaded, and the rounds would be impossible.
+          #
+          # It is not a licence to overwrite: PyPI refuses to replace an existing file
+          # whatever this says. It only means "already there" stops being an error, and
+          # a re-run publishes exactly what is new.
+          skip-existing: true
