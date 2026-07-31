@@ -120,6 +120,16 @@ class ToolLoopDetector:
                 evidence_node_ids=tuple(node_ids),
             )
 
+    # A loop is deliberately attributed to the repeated call's *first* occurrence, even
+    # though on the real stuck session that is step 1 — the agent's opening, entirely
+    # reasonable check, long before it was actually stuck. Anchoring instead at the first
+    # repeated answer was tried and measured worse on both counts: synthetic top-1 fell
+    # from 94.4% to 88.9%, and on the real run the loop dropped below a transient patch
+    # failure the agent had already recovered from. Ranking weights precedence on purpose
+    # — an onset is meant to be early — so moving the anchor later demotes the very
+    # finding it was meant to sharpen. Naming the moment repetition turned unproductive
+    # needs the ranker to know it is a span, not a step.
+
     @staticmethod
     def _is_stuck(events: list[ToolCallEvent]) -> bool:
         """Whether repeating the call kept turning up anything new."""

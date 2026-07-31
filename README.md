@@ -51,9 +51,17 @@ Hermes run fixing an ordinary bug — broke the engine in a way none of the twen
 had: the agent re-ran its verification command after every edit, and the loop detector
 read seven identical calls as being stuck, outranking the steps that had actually failed.
 Synthetic traces only ever repeat a call when something *is* stuck, so "same arguments"
-and "making no progress" were never distinguishable in them. Both the fix and the
-regressions are in `tests/test_real_run.py`. Expect more of this as real runs accumulate,
-and read the table above as measuring the ranking rather than the product.
+and "making no progress" were never distinguishable in them. The obvious fix — demand
+identical outputs — then went silent on a run that spent twenty-five steps cycling
+between two answers, so the rule became whether calls keep turning up results that are
+*new*. Both corrections, and the regressions that pin them, are in
+`tests/test_real_run.py`.
+
+Across the six real runs recorded so far the engine now behaves: the two clean successes
+produce no findings at all, the stuck run names its loop, and the run that failed and
+recovered says so in those words. Neither correction moved the table above by a tenth of
+a point, which is the honest summary of what that table measures — the ranking, not the
+product.
 
 ## Install
 
