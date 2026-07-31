@@ -59,3 +59,12 @@ aside { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 .attrs dd { margin: 0; overflow-wrap: anywhere; }
 
 ul { margin: 4px 0; padding-left: 18px; font-size: 12px; }
+
+.toggle3d {
+  font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff;
+}
+.toggle3d:hover { border-color: #4a6cf7; color: #4a6cf7; }
+.map3d { height: 100%; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.map3d canvas { flex: 1; }
+.dim3d { margin: 0; padding: 6px 10px; background: #101319; color: #8a93a6; }

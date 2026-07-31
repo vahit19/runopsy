@@ -12,7 +12,9 @@ The ten-item first sprint from section 24 of the design document is complete. Th
 
 Replay execution runs a counterfactual experiment in a sandbox copy; a supporting result upgrades a candidate to `replay_supported`, including creating one at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
 
-**Not built yet:** the optional 3D view, which the design puts last and behind the 2D one · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
+**Not built yet:** the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
+
+The 3D view exists and keeps its designed place: optional, lazy-loaded (Three.js lives in its own chunk nobody downloads without clicking the toggle), never the default. Depth carries time, height carries severity, and inference stays visually weaker than record — propagation is a translucent arc, because a guess must not become more convincing for having been drawn in 3D.
 
 **The web UI.** `cd packages/runopsy-ui && npm install && npm run build` writes into `runopsy-server/src/runopsy_server/static/`, which the server mounts at `/` when present. The build output is **not** in version control: it is produced at release time and bundled into the wheel, so `pip install` gives a working view without a Node toolchain, while a source checkout that never ran the build falls back to the server-rendered index. That fallback is deliberate and worth keeping — a diagnosis tool that shows nothing without a JavaScript build has made itself hardest to reach exactly when it is needed. `create_app(store, serve_ui=False)` forces the fallback, and the tests use it.
 

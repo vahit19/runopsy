@@ -1,14 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
 import { api, type TraceNode } from "./api";
 import { DiagnosisPanel } from "./Diagnosis";
 import { EvidencePanel } from "./Evidence";
 import { FailureMap } from "./FailureMap";
+
+// Loaded only when asked for: the design keeps 3D optional and behind 2D, and nobody
+// who never clicks the toggle should download Three.js.
+const FailureMap3D = lazy(() => import("./FailureMap3D"));
 import { useSelection } from "./store";
 
 export function App() {
   const { runId, focusedNodeId, selectRun } = useSelection();
+  const [threeD, setThreeD] = useState(false);
 
   const runs = useQuery({ queryKey: ["runs"], queryFn: api.runs });
 
@@ -58,6 +63,9 @@ export function App() {
             </option>
           ))}
         </select>
+        <button className="toggle3d" onClick={() => setThreeD((value) => !value)}>
+          {threeD ? "2D map" : "3D view"}
+        </button>
         {runId && (
           <a href={api.reportUrl(runId)} target="_blank" rel="noreferrer">
             open report
@@ -72,11 +80,21 @@ export function App() {
       <main>
         <div className="map">
           {graph.data ? (
-            <FailureMap
-              graph={graph.data}
-              onset={onset}
-              observedFailureNodeId={diagnosis.data?.observed_failure_node_id ?? null}
-            />
+            threeD ? (
+              <Suspense fallback={<p className="gloss">Loading the 3D view…</p>}>
+                <FailureMap3D
+                  graph={graph.data}
+                  onset={onset}
+                  observedFailureNodeId={diagnosis.data?.observed_failure_node_id ?? null}
+                />
+              </Suspense>
+            ) : (
+              <FailureMap
+                graph={graph.data}
+                onset={onset}
+                observedFailureNodeId={diagnosis.data?.observed_failure_node_id ?? null}
+              />
+            )
           ) : (
             <p className="gloss">{graph.isError ? String(graph.error) : "Loading the trace…"}</p>
           )}

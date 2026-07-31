@@ -134,7 +134,7 @@ reported as reproduction, never as causation.
 | `runopsy adapter hermes plugin` | install the plugin that records model calls and tokens |
 | `runopsy-inspect import LOG` | read an Inspect AI eval log into a trace |
 | `runopsy prune` | delete traces past the retention window |
-| `runopsy ui` | the React timeline and failure map, loopback only |
+| `runopsy ui` | the React timeline and failure map (optional 3D), loopback only |
 | `runopsy bench [--compare\|--inject]` | score the engine against labelled traces |
 | `runopsy config --init` | write a commented `runopsy.toml` |
 | `runopsy setup` | store a provider key in the OS keyring |
@@ -217,9 +217,8 @@ diagnosis of a trace we misunderstood.
 Measured at scale with `runopsy bench --perf`: 100,000 events ingest in about three
 seconds and every stage stays roughly linear.
 
-Not built yet: the optional 3D view (the design puts it last, behind the 2D one), the
-Inspect AI harness, the opt-in real-run corpus (section 17.1 layer four), and
-publication to PyPI — see [RELEASING.md](RELEASING.md) for what publishing still needs.
+Not built yet: the opt-in real-run corpus (section 17.1 layer four), and publication to
+PyPI — see [RELEASING.md](RELEASING.md) for what publishing still needs.
 
 ## The web view
 
