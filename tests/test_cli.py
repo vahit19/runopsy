@@ -269,3 +269,84 @@ class TestRunsAndDoctor:
 
         assert "not set" in output
         assert "no provider key" in output
+
+
+class TestTheWelcomeScreen:
+    """What someone sees the first time they type `runopsy`.
+
+    Typer's default listed seventeen commands in declaration order, headed by `hook` —
+    which its own help says the runtime calls, not a person. A new reader's first
+    impression was a machine-facing command they must never run.
+    """
+
+    def test_bare_invocation_orients_rather_than_dumping_commands(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["--store", str(tmp_path)])
+
+        assert result.exit_code == 0, result.output
+        assert "Runopsy" in result.output
+        assert "Start here" in result.output
+
+    def test_it_says_what_state_this_machine_is_in(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["--store", str(tmp_path)])
+
+        assert "no runs recorded yet" in result.output
+
+    def test_with_nothing_recorded_it_does_not_suggest_diagnosing(self, tmp_path: Path) -> None:
+        """Telling someone to diagnose a run they have not recorded is how a tool gets
+        closed and not reopened."""
+        result = runner.invoke(app, ["--store", str(tmp_path)])
+
+        assert "runopsy diagnose latest" not in result.output
+        assert "runopsy record" in result.output
+
+    def test_with_runs_recorded_it_suggests_reading_them(self, tmp_path: Path) -> None:
+        store = tmp_path / "store"
+        with Collector.open(store) as collector:
+            collector.record_all([run_start("run_x"), run_end(1, "run_x")])
+
+        result = runner.invoke(app, ["--store", str(store)])
+
+        assert "runopsy diagnose latest" in result.output
+
+    def test_a_missing_key_is_stated_as_optional_not_as_a_problem(self) -> None:
+        """The product works entirely without one; a tool that demands a credential it
+        does not use trains people to ignore what it says.
+
+        Rendered directly rather than through the CLI, because a developer machine may
+        resolve a key from the environment and this is about the case where none does.
+        """
+        from rich.console import Console
+
+        from runopsy_cli import welcome
+
+        situation = welcome.Situation(
+            version="0.1.0",
+            run_count=0,
+            latest_run=None,
+            latest_state=None,
+            runtime_wired=False,
+            runtime_recorded=False,
+            key_source=None,
+            store=".runopsy",
+        )
+        console = Console(width=100, no_color=True)
+        with console.capture() as captured:
+            console.print(welcome.screen(situation))
+
+        text = captured.get()
+        assert "--mode hybrid" in text
+        assert "missing" not in text.lower()
+        assert "error" not in text.lower()
+
+    def test_it_is_pure_ascii(self, tmp_path: Path) -> None:
+        """A legacy Windows code page raises rather than substituting, and a welcome
+        screen that crashes is a first impression there is no recovering from."""
+        result = runner.invoke(app, ["--store", str(tmp_path)])
+
+        result.output.encode("cp1252")
+
+    def test_the_machine_facing_command_is_hidden_from_the_listing(self) -> None:
+        result = runner.invoke(app, ["--help"])
+
+        assert "hook" not in result.output
+        assert "diagnose" in result.output

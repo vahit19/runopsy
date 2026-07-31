@@ -18,7 +18,7 @@ from rich.table import Table
 from runopsy_adapter import hermes, record_steps
 from runopsy_adapter import launch as launcher
 from runopsy_bench import compare_strategies, comparison_markdown, run_benchmark
-from runopsy_cli import render
+from runopsy_cli import __version__, render
 from runopsy_cli.config import CONFIG_FILENAME, RunopsyConfig, example_config, load_config
 from runopsy_cli.report import render_report
 from runopsy_collector import Collector
@@ -48,7 +48,11 @@ from runopsy_semantic import (
 app = typer.Typer(
     name="runopsy",
     help="Diagnose AI agent runs: find where a run started failing and what it affected.",
-    no_args_is_help=True,
+    # Deliberately not `no_args_is_help`. Typer's default listed seventeen commands in
+    # declaration order, headed by `hook` — which its own help says the runtime calls,
+    # not a person. See `welcome.py` for what replaced it.
+    no_args_is_help=False,
+    invoke_without_command=True,
     add_completion=False,
 )
 
@@ -106,7 +110,48 @@ def _resolve_run(collector: Collector, run_id: str) -> str:
     return resolved
 
 
-@app.command(name="hook")
+@app.callback()
+def main(context: typer.Context, store: StoreOption = None) -> None:
+    """Show where this machine stands, and what to type next, when given no command."""
+    if context.invoked_subcommand is not None:
+        return
+
+    from runopsy_cli import welcome
+
+    try:
+        with Collector.open(store) as collector:
+            runs = collector.runs()
+            root = str(collector.paths.root)
+    except Exception:
+        # A welcome screen must open on a machine where nothing works yet — an
+        # unreadable store is a thing to report, not a thing to crash on.
+        runs, root = (), "not created yet"
+
+    latest = runs[0] if runs else None
+    status = hermes.adapter_status()
+    resolved = resolve()
+
+    console.print(
+        welcome.screen(
+            welcome.Situation(
+                version=__version__,
+                run_count=len(runs),
+                latest_run=latest.run_id if latest else None,
+                latest_state=(
+                    (latest.outcome.value if latest.is_finished else "unfinished")
+                    if latest
+                    else None
+                ),
+                runtime_wired=status.is_wired,
+                runtime_recorded=any(run.runtime == hermes.RUNTIME for run in runs),
+                key_source=resolved.source if resolved else None,
+                store=root,
+            )
+        )
+    )
+
+
+@app.command(name="hook", hidden=True)
 def hook_command(
     event: Annotated[str, typer.Argument(help="Hermes hook event name, e.g. post_tool_call.")],
     store: StoreOption = None,

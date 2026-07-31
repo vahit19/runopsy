@@ -10,20 +10,39 @@ shows the evidence behind that claim, and plans a controlled replay to test it.
 It runs locally, spends no tokens for its core analysis, and never claims a cause it has
 not validated.
 
-```
-Observed failure  (what the run visibly got wrong)
-  step 14 pytest
-  tool 'pytest' failed with exit code 1
+<p align="center">
+  <img src="docs/images/diagnosis.svg" alt="runopsy diagnose: the observed failure at step 14, the suspected onset at step 9, and the replay command that would test it" width="820">
+</p>
 
-Suspected onset  (where it may have started going wrong, unverified)
-  step 9 write_config
-  tool 'write_config' failed with exit code 1
-  47% confidence, unverified
-  may have affected step 10, step 11, step 12 and 2 more
+The run above failed at step 14. It broke at step 9. Every image in this README is
+rendered from real command output by [`scripts/render_demo.py`](scripts/render_demo.py)
+— none of them is a mock, in a project whose argument is that a confident statement can
+be checked.
 
-  No cause has been confirmed. To test this candidate, replay from it:
-    runopsy replay run_0042 --from-step 9
-```
+## What Runopsy is, and is not
+
+**It is not a coding assistant, and it does not replace the one you use.** Runopsy has
+no chat, writes no code and makes no suggestions. It attaches to whatever already runs
+your work — an agent, a CI pipeline, a Makefile — records what happened, and tells you
+where it started going wrong.
+
+| you already have | Runopsy adds |
+| --- | --- |
+| an agent (Hermes today) | `runopsy run "task"` drives it and diagnoses the session |
+| a pipeline or test suite | `runopsy record -s "make" -s "pytest"` wraps it |
+| Inspect AI eval logs | `runopsy-inspect import` reads them |
+| nothing yet | the worked example, in one command |
+
+So there is no model to pick and no key to enter for the core product: deterministic
+diagnosis spends zero tokens and makes zero network calls. A provider key buys exactly
+one optional thing — `--mode hybrid`, which asks a model about the few steps already
+found suspicious — and `runopsy setup` stores it in your OS keyring when you want it.
+
+**What makes it different** is not the visualisation, which anyone could rebuild. It is
+that Runopsy will *test* its own claim: `runopsy replay --execute` re-runs the trace in a
+disposable sandbox with one thing changed, and only upgrades a suspicion to a cause when
+the downstream failures actually disappear. Every other tracing tool shows you what
+happened. This one says where it broke and then tries to prove itself wrong.
 
 ## Does it actually work?
 
@@ -62,6 +81,28 @@ produce no findings at all, the stuck run names its loop, and the run that faile
 recovered says so in those words. Neither correction moved the table above by a tenth of
 a point, which is the honest summary of what that table measures — the ranking, not the
 product.
+
+## What you get
+
+<p align="center">
+  <img src="docs/images/welcome.svg" alt="The runopsy welcome screen: status of this machine and what to type next" width="820">
+</p>
+
+Typing `runopsy` with no arguments tells you where this machine stands — what has been
+recorded, whether a runtime is connected, whether a key is set — and suggests the one or
+two commands that make sense from there. The suggestions change with the state, because
+telling somebody to diagnose a run when they have recorded none is how a tool gets closed
+and not reopened.
+
+<p align="center">
+  <img src="docs/images/graph.svg" alt="runopsy graph: the run as a timeline, with propagation drawn as inference" width="820">
+</p>
+
+`runopsy graph` draws the run as a chain, marking the onset and the observed failure, and
+lists propagation separately under *may reach* with its confidence. `runopsy ui` puts the
+same distinction in a browser as a 2D map, with an optional 3D view where depth is time
+and height is severity — recorded steps are solid, inference is a translucent arc that
+fades with confidence. A guess must not look more convincing for having perspective.
 
 ## Install
 
