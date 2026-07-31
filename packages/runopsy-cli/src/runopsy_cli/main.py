@@ -211,8 +211,25 @@ def adapter(
     if action == "status":
         _adapter_status(store)
         return
+    if action == "plugin":
+        installed = hermes.install_plugin()
+        console.print(f"Installed the Runopsy plugin at {installed}.")
+        console.print(
+            "\nHermes loads user plugins only when named in its config. Add to "
+            "config.yaml:\n\n  plugins:\n    enabled:\n      - runopsy\n",
+            style="bold",
+        )
+        console.print(
+            "The plugin records model calls — tokens, cost, latency — which shell hooks\n"
+            "cannot carry: Hermes sends usage data only to Python plugins. Without it a\n"
+            "trace has tool calls but no llm_call events, and the budget detector is\n"
+            "blind. It only ever forwards to 'runopsy hook'; failures are swallowed so\n"
+            "it can never break the run it is observing.",
+            style="dim",
+        )
+        return
     if action != "config":
-        errors.print(f"Unknown action {action!r}. Use 'config' or 'status'.", style="red")
+        errors.print(f"Unknown action {action!r}. Use 'config', 'status' or 'plugin'.", style="red")
         raise typer.Exit(code=2)
 
     target = Path(store).resolve() if store else None

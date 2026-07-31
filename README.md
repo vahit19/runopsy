@@ -131,6 +131,7 @@ reported as reproduction, never as causation.
 | `runopsy export --otlp` | the same run as OpenInference-shaped OTLP JSON |
 | `runopsy graph` | the run as a timeline; `--format dot` for Graphviz |
 | `runopsy adapter hermes status` | check the runtime is really wired and recording |
+| `runopsy adapter hermes plugin` | install the plugin that records model calls and tokens |
 | `runopsy-inspect import LOG` | read an Inspect AI eval log into a trace |
 | `runopsy prune` | delete traces past the retention window |
 | `runopsy ui` | the React timeline and failure map, loopback only |

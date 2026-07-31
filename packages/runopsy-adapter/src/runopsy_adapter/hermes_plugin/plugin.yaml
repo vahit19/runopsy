@@ -1,0 +1,6 @@
+name: runopsy
+version: "0.1.0"
+description: "Records model-call token usage and cost into Runopsy traces. Hermes sends usage data only to Python plugins, never to shell hooks, so without this a Runopsy trace has no llm_call events and the budget detector is blind."
+author: Vahit Feryad
+hooks:
+  - post_api_request

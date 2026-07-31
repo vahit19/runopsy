@@ -415,6 +415,159 @@ class TestAFailedCommandIsAFailedStep:
         assert event.tool.exit_code == 1
 
 
+class TestModelCallsArriveThroughThePlugin:
+    """The bridge for the data shell hooks cannot carry.
+
+    Hermes sends token usage only to Python plugins (`post_api_request`), never to
+    shell hooks — so real traces had tool calls and no model calls, and the budget
+    detector was blind on the primary runtime. The bundled plugin forwards that hook to
+    `runopsy hook post_llm_call`; these tests pin both ends of the bridge.
+    """
+
+    def payload(self, **extra: Any) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "model": "openai/gpt-4o-mini",
+            "provider": "openrouter",
+            "finish_reason": "stop",
+            "duration_ms": 5290,
+            "input_tokens": 11400,
+            "output_tokens": 51,
+            "cached_input_tokens": 512,
+            "cost_usd": 0.0018,
+        }
+        base.update(extra)
+        return {"hook_event_name": "post_llm_call", "session_id": SESSION, "extra": base}
+
+    def mapped(self, **extra: Any) -> LlmCallEvent:
+        event = map_payload(self.payload(**extra), sequence=1, timestamp=NOW)
+        assert isinstance(event, LlmCallEvent)
+        return event
+
+    def test_tokens_cost_and_latency_survive_the_mapping(self) -> None:
+        event = self.mapped()
+
+        assert event.llm.tokens.input_tokens == 11400
+        assert event.llm.tokens.output_tokens == 51
+        assert event.llm.tokens.cached_input_tokens == 512
+        assert event.llm.cost_usd == 0.0018
+        assert event.llm.latency_ms == 5290
+        assert event.llm.provider == "openrouter"
+
+    def test_a_missing_usage_still_records_a_valid_call(self) -> None:
+        """A sparser event, never a rejected one — the model call still happened."""
+        event = map_payload(
+            {
+                "hook_event_name": "post_llm_call",
+                "session_id": SESSION,
+                "extra": {"model": "m"},
+            },
+            sequence=1,
+            timestamp=NOW,
+        )
+
+        assert isinstance(event, LlmCallEvent)
+        assert event.llm.tokens.input_tokens == 0
+        assert event.llm.cost_usd is None
+
+    def test_a_negative_cost_is_dropped_rather_than_recorded(self) -> None:
+        assert self.mapped(cost_usd=-1).llm.cost_usd is None
+
+    def test_the_plugin_builds_the_payload_this_mapper_reads(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Both ends of the bridge, held together in one place."""
+        from runopsy_adapter import hermes_plugin
+
+        sent: dict[str, Any] = {}
+
+        def fake_run(command: list[str], **kwargs: Any) -> Any:
+            sent["command"] = command
+            sent["payload"] = json.loads(kwargs["input"])
+            return None
+
+        monkeypatch.setattr("runopsy_adapter.hermes_plugin.subprocess.run", fake_run)
+        monkeypatch.setattr(hermes_plugin, "_runopsy_executable", lambda: "runopsy")
+
+        hermes_plugin._on_post_api_request(
+            session_id=SESSION,
+            response_model="openai/gpt-4o-mini",
+            provider="openrouter",
+            api_duration=5.29,
+            finish_reason="stop",
+            usage={"input_tokens": 11400, "output_tokens": 51, "cache_read_tokens": 512},
+        )
+
+        assert sent["command"][1:] == ["hook", "post_llm_call"]
+        event = map_payload(sent["payload"], sequence=1, timestamp=NOW)
+        assert isinstance(event, LlmCallEvent)
+        assert event.llm.tokens.input_tokens == 11400
+        assert event.llm.tokens.cached_input_tokens == 512
+        assert event.llm.latency_ms == 5290
+
+    def test_the_plugin_never_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """It runs inside the agent's process; crashing it breaks the run it observes."""
+        from runopsy_adapter import hermes_plugin
+
+        def explode(*args: Any, **kwargs: Any) -> Any:
+            msg = "boom"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr("runopsy_adapter.hermes_plugin.subprocess.run", explode)
+        monkeypatch.setattr(hermes_plugin, "_runopsy_executable", lambda: "runopsy")
+
+        hermes_plugin._on_post_api_request(usage="not-a-dict", api_duration="bad")
+
+    def test_no_runopsy_on_path_means_a_silent_no_op(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from runopsy_adapter import hermes_plugin
+
+        called: list[Any] = []
+        monkeypatch.setattr(
+            "runopsy_adapter.hermes_plugin.subprocess.run", lambda *a, **k: called.append(a)
+        )
+        monkeypatch.setattr(hermes_plugin, "_runopsy_executable", lambda: None)
+
+        hermes_plugin._on_post_api_request(usage={"input_tokens": 1})
+
+        assert called == []
+
+    def test_install_copies_both_files(self, tmp_path: Path) -> None:
+        from runopsy_adapter.hermes import install_plugin
+
+        installed = install_plugin(tmp_path / "plugins" / "runopsy")
+
+        assert (installed / "__init__.py").is_file()
+        assert (installed / "plugin.yaml").is_file()
+
+    def test_the_manifest_registers_only_the_usage_hook(self) -> None:
+        """One hook, observational. The plugin is a bridge, not a second adapter."""
+        import yaml
+
+        from runopsy_adapter.hermes import plugin_source_dir
+
+        manifest = yaml.safe_load((plugin_source_dir() / "plugin.yaml").read_text())
+
+        assert manifest["name"] == "runopsy"
+        assert manifest["hooks"] == ["post_api_request"]
+
+    def test_the_plugin_module_imports_without_hermes_or_runopsy_internals(self) -> None:
+        """It runs inside Hermes, where none of our packages need to be importable."""
+        import ast
+
+        from runopsy_adapter.hermes import plugin_source_dir
+
+        tree = ast.parse((plugin_source_dir() / "__init__.py").read_text(encoding="utf-8"))
+        module_level: set[str] = set()
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                module_level |= {alias.name.split(".")[0] for alias in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                module_level.add(node.module.split(".")[0])
+
+        assert "runopsy_adapter" not in module_level
+        assert "hermes_cli" not in module_level
+        assert "agent" not in module_level
+
+
 class TestPayloadsReachTheVault:
     """The trace stores hashes; the text has to be kept somewhere or it is lost.
 

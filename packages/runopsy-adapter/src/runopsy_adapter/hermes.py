@@ -44,6 +44,7 @@ from runopsy_core.schema import (
     RunPayload,
     RunStartEvent,
     SecurityMetadata,
+    TokenUsage,
     ToolCallEvent,
     ToolPayload,
 )
@@ -257,15 +258,30 @@ def map_payload(
         )
 
     if event_name == "post_llm_call":
+        # Shell hooks never deliver this event — Hermes routes it to plugins only — so
+        # in practice these payloads come from the bundled Runopsy plugin, which fills
+        # `extra` with the usage summary Hermes hands to post_api_request. Everything is
+        # read defensively all the same: a hand-fed or future-version payload without
+        # token fields must still record a valid, merely sparser, model call.
+        response = _text(extra.get("response"))
+        cost = extra.get("cost_usd")
+        _preserve(vault, response)
         return LlmCallEvent(
             **common,
             llm=LlmPayload(
                 model=_text(extra.get("model")) or _text(payload.get("model")) or "unknown",
-                provider=_text(extra.get("platform")),
+                provider=_text(extra.get("provider")) or _text(extra.get("platform")),
+                response_hash=hash_text(response) if response else None,
+                tokens=TokenUsage(
+                    input_tokens=max(int(extra.get("input_tokens") or 0), 0),
+                    output_tokens=max(int(extra.get("output_tokens") or 0), 0),
+                    cached_input_tokens=max(int(extra.get("cached_input_tokens") or 0), 0),
+                ),
                 latency_ms=max(int(extra.get("duration_ms") or 0), 0),
                 finish_reason=_text(extra.get("finish_reason")),
+                cost_usd=float(cost) if isinstance(cost, (int, float)) and cost >= 0 else None,
             ),
-            security=_flagged(_text(extra.get("response"))),
+            security=_flagged(response),
         )
 
     child_status = str(extra.get("child_status") or "")
@@ -317,6 +333,39 @@ def _config_candidates() -> list[Path]:
         base = Path(root) if root else Path.home()
         paths.append(base / suffix)
     return paths
+
+
+def plugin_source_dir() -> Path:
+    """Where the bundled Hermes plugin files live inside this package."""
+    return Path(__file__).parent / "hermes_plugin"
+
+
+def plugin_install_dir(config_path: Path | None = None) -> Path:
+    """Where Hermes looks for user plugins: ``<hermes_home>/plugins/runopsy``.
+
+    Derived from wherever the config was found, since Hermes anchors both to the same
+    home directory; falls back to the platform default when no config exists yet.
+    """
+    found = config_path or next((path for path in _config_candidates() if path.is_file()), None)
+    home = found.parent if found is not None else _config_candidates()[0].parent
+    return home / "plugins" / "runopsy"
+
+
+def install_plugin(target: Path | None = None) -> Path:
+    """Copy the plugin into Hermes' user-plugin directory, returning where it went.
+
+    This writes into a directory that belongs to the plugin — creating
+    ``plugins/runopsy/`` is claiming our own name, not editing anyone's file. Enabling
+    it is different: ``plugins.enabled`` lives in the user's config.yaml, so that step
+    stays theirs and the CLI prints the line to paste instead of adding it.
+    """
+    destination = target or plugin_install_dir()
+    destination.mkdir(parents=True, exist_ok=True)
+    for name in ("__init__.py", "plugin.yaml"):
+        destination.joinpath(name).write_text(
+            plugin_source_dir().joinpath(name).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    return destination
 
 
 def adapter_status(config_path: Path | None = None) -> AdapterStatus:
