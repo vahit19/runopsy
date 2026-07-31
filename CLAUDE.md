@@ -12,7 +12,9 @@ The ten-item first sprint from section 24 of the design document is complete. Th
 
 Replay execution runs a counterfactual experiment in a sandbox copy; a supporting result upgrades a candidate to `replay_supported`, including creating one at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
 
-**Not built yet:** the React UI (`runopsy ui` serves an HTML view instead) · `runopsy run` (needs the runtime adapter driving the agent, not just wrapping a pipeline) · four of the design's API endpoints (`GET /v1/diagnoses/{id}`, `POST /v1/runs/{id}/replay`, the SSE stream, `POST /v1/export`) · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
+**Not built yet:** the React UI (`runopsy ui` serves an HTML view instead) · `runopsy run` (needs the runtime adapter driving the agent, not just wrapping a pipeline) · the opt-in real-run corpus (section 17.1 layer four) · PyPI publication, see `RELEASING.md`.
+
+`POST /v1/runs/{id}/replay` is the one design endpoint deliberately not built, and a test enforces its absence. Executing a replay is the only thing here that can change the world; the CLI gets its approval from a terminal, and shipping the endpoint without an equivalent would put the fail-closed gate behind a request body.
 
 **The first real agent sessions were recorded on 31 July 2026** — live Hermes 0.19.0 runs captured through the shell hooks: two that succeeded (33 and 7 events) and one given a contradictory specification that ran 42 events and never finished. They found four things twenty synthetic cases had not, and they are the template for what real traces do to this engine:
 
@@ -262,9 +264,9 @@ Anything the output tells a user to run must actually run. `tests/test_real_run.
 
 Hermes slash commands: `/runopsy status|diagnose|evidence <n>|graph|replay <n>|mode offline|budget <usd>`
 
-Local API, loopback only. Implemented: `GET /v1/health` · `POST /v1/events` · `GET /v1/runs` · `GET /v1/runs/{id}` · `GET /v1/runs/{id}/graph` · `POST /v1/runs/{id}/diagnose` · `POST /v1/runs/{id}/replay/plan` · `GET /v1/runs/{id}/report`.
+Local API, loopback only. Implemented: `GET /v1/health` · `POST /v1/events` · `GET /v1/runs` · `GET /v1/runs/{id}` · `GET /v1/runs/{id}/graph` · `POST /v1/runs/{id}/diagnose` · `GET /v1/diagnoses/{id}` · `POST /v1/runs/{id}/replay/plan` · `GET /v1/runs/{id}/report` · `GET /v1/runs/{id}/stream` (SSE) · `POST /v1/export`.
 
-Designed but not implemented: `GET /v1/diagnoses/{id}` · `POST /v1/runs/{id}/replay` · `GET /v1/runs/{id}/stream` (SSE) · `POST /v1/export`. The replay-execution endpoint is deliberately last: executing over HTTP needs an approval path that the CLI gets from the terminal, and shipping it without one would put the fail-closed gate behind a request body.
+Designed but not implemented: `POST /v1/runs/{id}/replay`, deliberately — executing over HTTP needs an approval path the CLI gets from the terminal, and shipping it without one would put the fail-closed gate behind a request body. A test enforces its absence.
 
 Storage split: structured events → DuckDB · raw event stream → append-only JSONL · artifacts → content-addressed local folder (SHA-256, size limit, secret scan) · graph cache → Parquet/DuckDB · diagnoses → JSON.
 

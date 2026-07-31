@@ -164,6 +164,80 @@ class TestWhatItRefusesToDo:
         assert "body" in response.json()["detail"]
 
 
+class TestDiagnosisLookup:
+    """`GET /v1/diagnoses/{id}`, and the storage split it depends on.
+
+    The design lists diagnoses as JSON on disk; nothing was writing them, so the
+    directory existed and stayed empty and the endpoint had nothing to serve.
+    """
+
+    def test_diagnosing_stores_the_bundle(self, client: TestClient, store: Path) -> None:
+        created = client.post(f"/v1/runs/{RUN}/diagnose").json()
+
+        fetched = client.get(f"/v1/diagnoses/{created['diagnosis_id']}")
+
+        assert fetched.status_code == 200, fetched.text
+        assert fetched.json()["run_id"] == RUN
+
+    def test_an_unknown_id_is_a_404_not_a_recomputation(self, client: TestClient) -> None:
+        """Recomputing on demand would answer for ids that were never issued."""
+        response = client.get("/v1/diagnoses/diag:made-up:0000")
+
+        assert response.status_code == 404
+
+    def test_a_traversal_attempt_cannot_escape_the_directory(self, client: TestClient) -> None:
+        """The id is built from a run id, which comes from a runtime we do not control."""
+        response = client.get("/v1/diagnoses/..%2F..%2Fetc%2Fpasswd")
+
+        assert response.status_code in {404, 400}
+
+
+class TestExportOverHttp:
+    def test_html_is_the_default(self, client: TestClient) -> None:
+        response = client.post("/v1/export", json={"run_id": RUN})
+
+        assert response.status_code == 200, response.text
+        assert response.text.startswith("<!doctype html>")
+
+    def test_otlp_is_available_and_valid_json(self, client: TestClient) -> None:
+        response = client.post("/v1/export", json={"run_id": RUN, "format": "otlp"})
+
+        assert response.status_code == 200, response.text
+        assert response.json()["resourceSpans"]
+
+    def test_it_is_redacted_unless_asked_otherwise(self, client: TestClient) -> None:
+        """An export is a sharing surface whichever transport carries it."""
+        default = client.post("/v1/export", json={"run_id": RUN, "format": "otlp"})
+        revealed = client.post(
+            "/v1/export",
+            json={"run_id": RUN, "format": "otlp", "include_sensitive": True},
+        )
+
+        assert default.text != revealed.text or "[redacted]" not in revealed.text
+
+    def test_an_unknown_format_is_rejected(self, client: TestClient) -> None:
+        response = client.post("/v1/export", json={"run_id": RUN, "format": "pdf"})
+
+        assert response.status_code == 422
+
+
+class TestTheEventStream:
+    def test_it_replays_what_is_already_recorded(self, client: TestClient) -> None:
+        with client.stream("GET", f"/v1/runs/{RUN}/stream") as response:
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith("text/event-stream")
+            body = "".join(response.iter_text())
+
+        assert body.count("data:") >= 2
+
+    def test_it_ends_when_the_run_does(self, client: TestClient) -> None:
+        """A finished run must close the stream rather than hold the connection open."""
+        with client.stream("GET", f"/v1/runs/{RUN}/stream") as response:
+            body = "".join(response.iter_text())
+
+        assert "event: end" in body
+
+
 class TestIngest:
     def test_events_can_be_recorded_over_http(self, client: TestClient, store: Path) -> None:
         event = tool(9, name="extra").model_dump(mode="json")

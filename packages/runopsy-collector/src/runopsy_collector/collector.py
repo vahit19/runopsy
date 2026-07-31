@@ -7,6 +7,7 @@ row rather than a step of history — and ``rebuild`` puts the index back.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
@@ -19,7 +20,19 @@ from runopsy_collector.retention import PrunePlan, PruneResult, apply_prune, pla
 from runopsy_collector.store import EventStore, RunSummary
 from runopsy_collector.vault import PayloadVault
 from runopsy_core import IntegrityReport, check_integrity
-from runopsy_core.schema import Event
+from runopsy_core.schema import DiagnosisBundle, Event
+
+_UNSAFE = re.compile(r"[^A-Za-z0-9_.-]")
+
+
+def _safe_name(identifier: str) -> str:
+    """A filename for an id that arrived over a socket.
+
+    A diagnosis id is built from a run id, and a run id comes from a runtime we do not
+    control. Anything that could climb out of the directory is replaced rather than
+    trusted.
+    """
+    return _UNSAFE.sub("_", identifier)[:120]
 
 
 class Collector:
@@ -126,6 +139,30 @@ class Collector:
         ``event_id`` and would therefore hide the very corruption this reports.
         """
         return check_integrity(run_id, self.journal(run_id).read())
+
+    def save_diagnosis(self, bundle: DiagnosisBundle) -> Path:
+        """Keep a diagnosis under its own id, as the design's storage split requires.
+
+        Diagnosis is a pure function of the trace, so this is a cache rather than a
+        record of something unrepeatable — but it is what lets a bundle be handed to
+        somebody by id, and what ``GET /v1/diagnoses/{id}`` serves. The id already
+        carries the trace fingerprint, so a re-analysed run writes a different file
+        instead of silently overwriting a diagnosis of different events.
+        """
+        path = self.paths.diagnoses_dir / f"{_safe_name(bundle.diagnosis_id)}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(bundle.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def diagnosis(self, diagnosis_id: str) -> DiagnosisBundle | None:
+        """Fetch a stored diagnosis, or ``None`` when it was never saved."""
+        path = self.paths.diagnoses_dir / f"{_safe_name(diagnosis_id)}.json"
+        if not path.is_file():
+            return None
+        try:
+            return DiagnosisBundle.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
 
     def plan_prune(self, retain_days: int, *, now: datetime | None = None) -> PrunePlan:
         """Work out which runs are past the retention window. Removes nothing."""

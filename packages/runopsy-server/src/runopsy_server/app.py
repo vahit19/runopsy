@@ -17,17 +17,20 @@ Two rules follow from that and are enforced rather than documented:
 
 from __future__ import annotations
 
+import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Final, Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from runopsy_cli.report import render_report
 from runopsy_collector import Collector, StorePaths
 from runopsy_core import AnalysisContext, apply_replay_evidence, diagnose, infer_affects
-from runopsy_core.schema import DiagnosisBundle, Event, TraceGraph
+from runopsy_core.openinference import to_otlp_json
+from runopsy_core.schema import DiagnosisBundle, Event, RunEndEvent, TraceGraph
 from runopsy_replay import build_plan, evidence_from_stored_run
 from runopsy_server import __version__
 
@@ -49,6 +52,23 @@ class ReplayPlanRequest(BaseModel):
     """The body of a replay-plan request."""
 
     from_step: int = Field(..., ge=0, description="Step to replay from.")
+
+
+class ExportRequest(BaseModel):
+    """The body of an export request."""
+
+    run_id: str
+    format: Literal["html", "otlp"] = "html"
+    include_sensitive: bool = False
+
+
+STREAM_POLL_SECONDS: Final = 0.5
+STREAM_IDLE_LIMIT: Final = 120
+"""Give up after roughly a minute of silence rather than holding the connection open.
+
+A run that stopped emitting has usually died, and a stream that waits forever on it ties
+up a worker and tells the viewer nothing.
+"""
 
 
 class RunSummaryOut(BaseModel):
@@ -179,7 +199,74 @@ def create_app(store: Path | None = None) -> FastAPI:
         poor place to make that decision on their behalf.
         """
         _, bundle = _analyse(collector, run_id)
+        # Persist so the bundle can be fetched again by id, which is what the design's
+        # storage split ("diagnoses -> JSON") and GET /v1/diagnoses/{id} both assume.
+        collector.save_diagnosis(bundle)
         return bundle.model_dump(mode="json")
+
+    @api.get("/v1/diagnoses/{diagnosis_id}")
+    def get_diagnosis(
+        diagnosis_id: str, collector: Collector = Depends(store_dep)
+    ) -> dict[str, Any]:
+        """A diagnosis previously computed, by id.
+
+        Only served if it was stored. Recomputing on demand would be easy — diagnosis is
+        a pure function of the trace — but it would also answer for ids that were never
+        issued, turning a lookup into an oracle for guessed run names.
+        """
+        bundle = collector.diagnosis(diagnosis_id)
+        if bundle is None:
+            raise HTTPException(status_code=404, detail=f"no stored diagnosis {diagnosis_id}")
+        return bundle.model_dump(mode="json")
+
+    @api.post("/v1/export")
+    def post_export(request: ExportRequest, collector: Collector = Depends(store_dep)) -> Response:
+        """Export a run as a self-contained report or as OpenInference-shaped OTLP.
+
+        Redacted unless asked otherwise, exactly like ``runopsy export``. An export is a
+        sharing surface whichever transport carries it, and this one is reachable by
+        anything that can open the port.
+        """
+        context, bundle = _analyse(collector, request.run_id)
+        redact = not request.include_sensitive
+        if request.format == "otlp":
+            document = to_otlp_json(context.graph, context.events, bundle, redact=redact)
+            return Response(content=document, media_type="application/json")
+        summary = collector.store.run(request.run_id)
+        html = render_report(bundle, context.graph, summary, redact=redact)
+        return HTMLResponse(html)
+
+    @api.get("/v1/runs/{run_id}/stream")
+    def get_stream(run_id: str, collector: Collector = Depends(store_dep)) -> StreamingResponse:
+        """Server-sent events for one run, for a view that follows a live session.
+
+        Reads the journal, which is the authoritative record and is appended to as the
+        run happens; the index lags it. The stream ends when the run does, or when the
+        client goes away — it does not wait forever on a run that never finishes,
+        because an agent that died leaves nothing to wait for.
+        """
+
+        def events() -> Iterator[str]:
+            seen = 0
+            idle = 0
+            while idle < STREAM_IDLE_LIMIT:
+                recorded = list(collector.journal(run_id).read())
+                fresh = recorded[seen:]
+                if fresh:
+                    idle = 0
+                    seen = len(recorded)
+                    for event in fresh:
+                        yield f"data: {event.model_dump_json()}\n\n"
+                        if isinstance(event, RunEndEvent):
+                            yield "event: end\ndata: {}\n\n"
+                            return
+                else:
+                    idle += 1
+                    yield ": keep-alive\n\n"
+                    time.sleep(STREAM_POLL_SECONDS)
+            yield "event: end\ndata: {}\n\n"
+
+        return StreamingResponse(events(), media_type="text/event-stream")
 
     @api.post("/v1/runs/{run_id}/replay/plan")
     def post_replay_plan(
