@@ -7,13 +7,20 @@ hook's first duty is not to break the run it observes, so it swallowed the error
 exited zero. A recorder that drops a third of history under ordinary parallelism is not
 a recorder.
 
-Two things were wrong and both are pinned here.
+Three things were wrong and all three are pinned here.
 
 The dedup check ran *before* the journal append, putting a database read between an
-event and the only durable copy of it. And opening the collector connects to the index,
-so a locked database failed before any code could write anything at all — durability
-depended on the derived data being available, which inverts the invariant the whole
-design rests on.
+event and the only durable copy of it. Opening the collector connects to the index, so a
+locked database failed before any code could write anything at all — durability depended
+on the derived data being available, which inverts the invariant the whole design rests
+on. And step numbers came from ``SELECT MAX(sequence) + 1`` with no lock holding the
+answer, so two subagents in one session took the same number; since an adapter builds the
+event id out of that number, the second event was deduplicated away as a repeat of the
+first.
+
+The last one only shows up when the parallel work shares a session id, which is what
+Hermes subagents actually do — the first test here gives each its own, and passes either
+way.
 """
 
 from __future__ import annotations
@@ -26,8 +33,9 @@ from pathlib import Path
 
 import pytest
 
-from runopsy_collector import Collector, StorePaths
+from runopsy_collector import Collector, SequenceAllocator, StorePaths
 from runopsy_collector.journal import EventJournal
+from runopsy_collector.sequence import COUNTER_NAME
 
 
 def payload(session: str, index: int) -> str:
@@ -117,8 +125,14 @@ class TestDurabilityDoesNotDependOnTheIndex:
         events = list(EventJournal(StorePaths.resolve(store).journal("sess_y")).read())
         assert [event.sequence for event in events] == [0, 1, 2]
 
-    def test_an_index_written_behind_can_be_rebuilt_from_the_journals(self, tmp_path: Path) -> None:
-        """What makes losing an index row survivable rather than merely regrettable."""
+    def test_an_index_written_behind_catches_up_without_being_asked(self, tmp_path: Path) -> None:
+        """What makes losing an index row survivable rather than merely regrettable.
+
+        Reading repairs the drift rather than reporting it. Requiring an explicit
+        ``rebuild`` would mean a user who records a run and diagnoses it immediately
+        gets whichever steps won the race, and a trace missing three of thirty-two steps
+        says nothing about itself — it just moves the onset.
+        """
         store = tmp_path / "store"
         for index in range(4):
             from runopsy_cli.main import _record_to_journal_only
@@ -126,10 +140,91 @@ class TestDurabilityDoesNotDependOnTheIndex:
             _record_to_journal_only(json.loads(payload("sess_z", index)), "sess_z", store)
 
         with Collector.open(store) as collector:
-            assert collector.events("sess_z") == ()  # nothing was ever indexed
-            indexed = collector.rebuild()
-            assert indexed == 4
+            # Nothing was ever indexed, yet all four are here: reading reconciled them.
             assert len(collector.events("sess_z")) == 4
+            assert collector.reconcile("sess_z") == 0  # and asking again costs nothing
+
+    def test_a_journal_only_run_is_still_listed_and_still_the_latest(self, tmp_path: Path) -> None:
+        """Otherwise the run is on disk, absent from every listing, and unreachable."""
+        from runopsy_cli.main import _record_to_journal_only
+
+        store = tmp_path / "store"
+        _record_to_journal_only(json.loads(payload("sess_only", 0)), "sess_only", store)
+
+        with Collector.open(store) as collector:
+            assert [summary.run_id for summary in collector.runs()] == ["sess_only"]
+            assert collector.latest_run_id() == "sess_only"
+
+    def test_reconciling_survives_an_unusable_index(self, tmp_path: Path) -> None:
+        """Repair is best-effort: failing to fix the index must not refuse the answer."""
+        from runopsy_cli.main import _record_to_journal_only
+
+        store = tmp_path / "store"
+        _record_to_journal_only(json.loads(payload("sess_broken", 0)), "sess_broken", store)
+
+        with Collector.open(store) as collector:
+            collector.store.close()
+            assert collector.reconcile("sess_broken") == 0
+
+
+class TestStepNumbersStayUniqueAcrossProcesses:
+    """A sequence is an identity, not a label.
+
+    An adapter builds the event id out of it — ``{run_id}_evt_{sequence:04d}`` — so two
+    events handed one number are one event to every layer downstream, and the second is
+    deduplicated out of the trace. Measured before this was fixed: thirty-two concurrent
+    steps in one session, thirty survived, and the integrity report called it a duplicate
+    sequence rather than two steps that no longer exist.
+    """
+
+    def test_parallel_subagents_sharing_a_session_keep_every_step(self, tmp_path: Path) -> None:
+        store = tmp_path / "store"
+        session = "shared_session"
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+            list(pool.map(lambda i: fire_hook(store, session, i), range(32)))
+
+        events = list(EventJournal(StorePaths.resolve(store).journal(session)).read())
+        sequences = [event.sequence for event in events]
+
+        assert len(events) == 32
+        assert len({event.event_id for event in events}) == 32, "two steps shared one id"
+        assert sorted(sequences) == list(range(32))
+
+        with Collector.open(store) as collector:
+            assert len(collector.events(session)) == 32
+            report = collector.integrity(session)
+            assert report.duplicate_sequences == ()
+            assert report.missing_sequences == ()
+
+    def test_reserving_hands_out_each_number_once(self, tmp_path: Path) -> None:
+        allocator = SequenceAllocator(tmp_path / "run")
+
+        assert [allocator.reserve() for _ in range(5)] == [0, 1, 2, 3, 4]
+
+    def test_reserving_a_block_advances_by_the_whole_block(self, tmp_path: Path) -> None:
+        allocator = SequenceAllocator(tmp_path / "run")
+
+        assert allocator.reserve(4) == 0
+        assert allocator.reserve() == 4
+
+    def test_a_deleted_counter_resumes_from_the_journal(self, tmp_path: Path) -> None:
+        """The counter is derived data. Losing it must not restart numbering at zero."""
+        store = tmp_path / "store"
+        for index in range(3):
+            fire_hook(store, "sess_seed", index)
+
+        run_dir = StorePaths.resolve(store).run_dir("sess_seed")
+        (run_dir / COUNTER_NAME).unlink()
+
+        assert SequenceAllocator(run_dir).reserve() == 3
+
+    def test_an_unrecorded_run_starts_at_zero(self, tmp_path: Path) -> None:
+        assert SequenceAllocator(tmp_path / "never-used").reserve() == 0
+
+    def test_reserving_nothing_is_a_mistake_worth_raising(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            SequenceAllocator(tmp_path / "run").reserve(0)
 
 
 class TestTheStoreIsPatientAboutContention:

@@ -392,18 +392,13 @@ class EventStore:
             for row in rows
         )
 
-    def next_sequence(self, run_id: str) -> int:
-        """The sequence number a new event for this run should take.
-
-        Read from the store rather than held in memory because a hook-based adapter is
-        a fresh process on every event: there is nothing to keep a counter in. Two
-        events racing here would collide, which the integrity check reports as a
-        duplicate rather than hiding — the visible failure being the point.
-        """
-        row = self._connection.execute(
-            "SELECT MAX(sequence) FROM events WHERE run_id = ?", [run_id]
-        ).fetchone()
-        return 0 if row is None or row[0] is None else int(row[0]) + 1
+    # Deliberately no `next_sequence` here. It used to live in this class as
+    # `SELECT MAX(sequence) + 1`, which is a read with nothing holding the value until
+    # the caller writes. Adapters run a fresh process per event, so parallel subagents
+    # raced it: two events took one number, an adapter turned that number into one event
+    # id, and dedup removed the second. Allocation now belongs to
+    # `runopsy_collector.sequence.SequenceAllocator`, which reserves under a file lock
+    # and keeps working when the index is locked — which is when the race happens.
 
     def latest_run_id(self) -> str | None:
         """The run ``runopsy diagnose latest`` refers to."""

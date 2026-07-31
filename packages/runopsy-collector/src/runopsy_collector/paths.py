@@ -85,9 +85,13 @@ class StorePaths:
         """Content-addressed payload text, local-only, never exported."""
         return self.root / "vault"
 
+    def run_dir(self, run_id: str) -> Path:
+        """Everything belonging to one run: its journal, and its sequence counter."""
+        return self.runs_dir / _require_safe_run_id(run_id)
+
     def journal(self, run_id: str) -> Path:
         """Path to one run's event journal."""
-        return self.runs_dir / _require_safe_run_id(run_id) / "events.jsonl"
+        return self.run_dir(run_id) / "events.jsonl"
 
     def ensure(self) -> None:
         """Create the directory structure if it is not already present."""

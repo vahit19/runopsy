@@ -178,7 +178,7 @@ def hook_command(
                 # replay has nothing to re-run, and --mode hybrid pays for "withheld".
                 mapped = hermes.map_payload(
                     payload,
-                    sequence=collector.store.next_sequence(run),
+                    sequence=collector.next_sequence(run),
                     vault=collector.vault if _config().vault_enabled else None,
                 )
                 if mapped is not None:
@@ -208,26 +208,23 @@ def _record_to_journal_only(payload: dict[str, object], run: str, store: Path | 
     """Write one hook event using nothing but the journal.
 
     The fallback for a locked index. It touches no database, so it cannot be blocked by
-    another process holding one, and the sequence number comes from the journal itself
-    rather than from a query.
+    another process holding one, and the step number is reserved beside the journal
+    rather than queried from the store.
 
-    Counting the journal is O(n) per event where the indexed path is O(1), which would
-    be the wrong trade on the normal path and is the right one here: this runs only when
-    the alternative is losing the event, and a hook writing a few hundred lines costs
-    nothing a person would notice.
+    Which is the same allocator the indexed path uses, deliberately. This runs precisely
+    when several processes are contending for one run, so it is the last place that can
+    afford a numbering scheme of its own: two fallbacks landing on one number would build
+    two events with one id, and the second would be deduplicated away.
     """
     from runopsy_adapter import hermes as hermes_adapter
     from runopsy_collector import StorePaths
     from runopsy_collector.journal import EventJournal
+    from runopsy_collector.sequence import SequenceAllocator
 
     paths = StorePaths.resolve(store)
     paths.ensure()
     journal = EventJournal(paths.journal(run))
-
-    # Where the indexed path would ask the store. Two hooks racing here can land on the
-    # same number; `check_integrity` reports that as a duplicate rather than hiding it,
-    # which is the honest outcome — a visible collision beats a silent omission.
-    sequence = sum(1 for _ in journal.read())
+    sequence = SequenceAllocator(paths.run_dir(run)).reserve()
 
     mapped = hermes_adapter.map_payload(payload, sequence=sequence)
     if mapped is not None:

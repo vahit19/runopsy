@@ -19,6 +19,7 @@ from typing import Self
 from runopsy_collector.journal import EventJournal, serialize
 from runopsy_collector.paths import StorePaths
 from runopsy_collector.retention import PrunePlan, PruneResult, apply_prune, plan_prune
+from runopsy_collector.sequence import SequenceAllocator
 from runopsy_collector.store import EventStore, RunSummary
 from runopsy_collector.vault import PayloadVault
 from runopsy_core import IntegrityReport, check_integrity
@@ -75,6 +76,20 @@ class Collector:
     def journal(self, run_id: str) -> EventJournal:
         """The append-only log for one run."""
         return EventJournal(self.paths.journal(run_id))
+
+    def next_sequence(self, run_id: str, count: int = 1) -> int:
+        """Reserve the next step number, or ``count`` consecutive ones, for a run.
+
+        Goes through :class:`SequenceAllocator` rather than asking the index for its
+        current maximum. The index answer was a read with no lock holding it, and an
+        adapter builds the event id out of the sequence, so two hooks racing produced two
+        events with one identity and the second was deduplicated out of existence.
+
+        Reserving is also why this belongs beside the journal instead of in the store: it
+        has to keep working when the index is locked, which is exactly when the race
+        happens.
+        """
+        return SequenceAllocator(self.paths.run_dir(run_id)).reserve(count)
 
     def record(self, event: Event) -> bool:
         """Record one event, returning whether it was new.
@@ -158,16 +173,80 @@ class Collector:
         return len(fresh)
 
     def events(self, run_id: str) -> tuple[Event, ...]:
-        """Indexed events for a run, in execution order."""
+        """Events for a run, in execution order, reconciled against the journal first.
+
+        "The journal is authoritative and the index is rebuildable" is only worth
+        anything if something actually rebuilds. Recording tolerates a lost index write —
+        it must, because DuckDB admits one writing process and parallel subagents each
+        run their own — but a user who records a run and immediately diagnoses it would
+        otherwise be handed whichever steps happened to win the race, with nothing said.
+        A trace missing three of thirty-two steps does not announce itself; it just moves
+        the onset.
+
+        So the read path repairs the drift instead of reporting it. The journal's line
+        count is one file scan, and it only costs more than that when there is something
+        genuinely missing to index.
+        """
+        self.reconcile(run_id)
         return self.store.events(run_id)
 
+    def reconcile(self, run_id: str) -> int:
+        """Index whatever the journal holds and the index lacks. Returns rows added.
+
+        Never raises. This runs on the way to answering a question, and failing to
+        repair the index is not a reason to refuse to answer it — the caller still gets
+        every event that *is* indexed, which is what they would have got before.
+        """
+        journal = self.journal(run_id)
+        recorded = journal.count()
+        if recorded == 0:
+            return 0
+
+        try:
+            known = self.store.event_ids_in_runs([run_id])
+            if len(known) >= recorded:
+                return 0
+
+            missing: list[Event] = []
+            seen: set[str] = set()
+            for event in journal.read():
+                if event.event_id in known or event.event_id in seen:
+                    continue
+                seen.add(event.event_id)
+                missing.append(event)
+            if not missing:
+                return 0
+
+            added = self.store.insert_many([(event, serialize(event)) for event in missing])
+        except Exception:
+            logger.warning("could not reconcile the index for %s; served it as indexed", run_id)
+            return 0
+
+        logger.info("reindexed %d event(s) for %s from the journal", added, run_id)
+        return added
+
+    def reconcile_all(self) -> int:
+        """Reconcile every run discoverable on disk, returning rows added."""
+        return sum(self.reconcile(run_id) for run_id in self.paths.known_run_ids())
+
     def runs(self) -> tuple[RunSummary, ...]:
-        """All known runs, most recently started first."""
+        """All known runs, most recently started first.
+
+        Reconciles any run whose journal exists but which the index has never heard of.
+        A run recorded entirely through the journal-only fallback would otherwise be
+        invisible to ``runopsy runs`` — present on disk, absent from every listing, and
+        unreachable by ``latest``.
+        """
+        indexed = {summary.run_id for summary in self.store.runs()}
+        for run_id in self.paths.known_run_ids():
+            if run_id not in indexed:
+                self.reconcile(run_id)
         return self.store.runs()
 
     def latest_run_id(self) -> str | None:
         """The run that bare ``latest`` refers to on the command line."""
-        return self.store.latest_run_id()
+        runs = self.runs()
+        return runs[0].run_id if runs else None
 
     def integrity(self, run_id: str) -> IntegrityReport:
         """Check a run's journal for gaps, duplicates and reordering.
