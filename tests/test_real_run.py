@@ -14,6 +14,18 @@ the actual trouble — on a run that ended in success.
 The lesson is not about the threshold. Synthetic traces only ever repeat a call when
 something is genuinely stuck, so "identical arguments" and "making no progress" were
 never distinguishable in them. They are trivially distinguishable in real work.
+
+A third session then corrected the correction. Given a contradictory specification the
+agent could not satisfy, it spent twenty-five steps writing a file and re-running the
+same check, whose output alternated between two answers. Requiring outputs to be
+identical — the obvious first fix — kept the engine silent on the one thing that had
+really gone wrong. What actually separates the two is whether calls keep turning up
+results that are *new*: 0.71 and 0.80 distinct outputs per call on the healthy cycles,
+0.31 on the stuck one.
+
+Both corrections left the synthetic benchmark at 94.4% top-1 and zero false positives,
+which is the point. Real traces did not improve the score; they changed what the score
+was failing to measure.
 """
 
 from __future__ import annotations
@@ -77,6 +89,26 @@ class TestRepeatingACommandThatMakesProgressIsNotALoop:
         assert not any(
             "identical arguments" in candidate.summary for candidate in bundle.candidates
         )
+
+    def test_alternating_between_two_answers_is_still_stuck(self) -> None:
+        """The correction to the correction.
+
+        Requiring outputs to be *identical* was the obvious first fix and it was too
+        strict: a third real session spent twenty-five steps writing a file and
+        re-running the same check while the check's output alternated between two
+        answers. Nothing was identical and nothing was moving, and the engine stayed
+        silent on the only thing that had actually gone wrong.
+        """
+        events: list[Event] = [run_start(RUN, task="fix the bug")]
+        events += [
+            call(index, output="sha256:" + ("e" if index % 2 else "f") * 64)
+            for index in range(1, 17)
+        ]
+        events.append(run_end(17, RUN, outcome=RunOutcome.FAILURE))
+
+        _, bundle = diagnosed(events)
+
+        assert any("identical arguments" in candidate.summary for candidate in bundle.candidates)
 
     def test_the_same_answer_every_time_is_still_a_loop(self) -> None:
         """Repetition that learns nothing is what the detector was always for."""

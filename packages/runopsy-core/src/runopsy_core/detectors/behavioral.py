@@ -72,10 +72,18 @@ class ToolLoopDetector:
     that pattern fired at HIGH severity on a run that succeeded, and outranked the steps
     that had actually failed.
 
-    So repetition has to be shown to be *unproductive* before it counts. The output is
-    what reveals that: differing results mean the world moved between calls and the
-    agent is making progress. Repetition is a loop when the calls keep failing, or when
-    they keep returning the very same answer.
+    So repetition has to be shown to be *unproductive* before it counts, and the output
+    is what reveals that. "Any difference means progress" was the obvious rule and it is
+    wrong: a third real session spent twenty-five steps writing a file and re-running the
+    same check, and the check's output simply alternated between two answers. Nothing was
+    identical, and nothing was moving either.
+
+    What separates the two is whether calls keep producing results that are *new*. An
+    agent making progress sees a different answer nearly every time it looks; an agent
+    that is stuck keeps rediscovering the same few. Measured on the real sessions: the
+    healthy edit-verify cycles ran at 0.71 and 0.80 distinct outputs per call, and the
+    stuck loop at 0.31. Requiring most calls to yield something new separates them
+    without touching a synthetic case.
 
     When no output was recorded at all, there is nothing to judge progress by, and the
     detector falls back to counting arguments as before — that is the weaker signal, but
@@ -114,13 +122,14 @@ class ToolLoopDetector:
 
     @staticmethod
     def _is_stuck(events: list[ToolCallEvent]) -> bool:
-        """Whether repeating the call achieved nothing."""
+        """Whether repeating the call kept turning up anything new."""
         if all(_tool_failed(event) for event in events):
             return True
         outputs = {event.tool.output_hash for event in events}
         if outputs == {None}:
             return True  # nothing recorded to judge progress by
-        return len(outputs) <= 1
+        # Fewer than half the calls returned an answer not already seen.
+        return len(outputs) * 2 <= len(events)
 
 
 def _tool_failed(event: ToolCallEvent) -> bool:
