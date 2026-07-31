@@ -2,6 +2,16 @@
 
 **Find where an AI agent run started going wrong — not just where it stopped.**
 
+[![CI](https://github.com/vahit19/runopsy/actions/workflows/ci.yml/badge.svg)](https://github.com/vahit19/runopsy/actions/workflows/ci.yml)
+[![Security](https://github.com/vahit19/runopsy/actions/workflows/security.yml/badge.svg)](https://github.com/vahit19/runopsy/actions/workflows/security.yml)
+[![PyPI](https://img.shields.io/pypi/v/runopsy)](https://pypi.org/project/runopsy/)
+[![Python](https://img.shields.io/pypi/pyversions/runopsy)](https://pypi.org/project/runopsy/)
+[![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
+
+```bash
+uv tool install runopsy && runopsy
+```
+
 When an agent fails, the last error is rarely the problem. A config written wrongly at
 step 9 surfaces as a failing test at step 14, and reading the log bottom-up sends you to
 fix the test. Runopsy records agent runs, localizes the step where things actually broke,
