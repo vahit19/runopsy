@@ -99,10 +99,28 @@ and not reopened.
 </p>
 
 `runopsy graph` draws the run as a chain, marking the onset and the observed failure, and
-lists propagation separately under *may reach* with its confidence. `runopsy ui` puts the
-same distinction in a browser as a 2D map, with an optional 3D view where depth is time
-and height is severity — recorded steps are solid, inference is a translucent arc that
-fades with confidence. A guess must not look more convincing for having perspective.
+lists propagation separately under *may reach* with its confidence.
+
+`runopsy ui` puts the same distinction in a browser, loopback only:
+
+<p align="center">
+  <img src="docs/images/ui-2d.png" alt="The web view: the run as a 2D causal map, with the diagnosis and evidence beside it" width="880">
+</p>
+
+And an optional 3D view of the same run, where depth is time and height is severity:
+
+<p align="center">
+  <img src="docs/images/ui-3d.png" alt="The 3D view: a 56-step agent run seen from above, the yellow suspected onset near the start and the red observed failure at the end" width="880">
+</p>
+
+That is a real 56-step agent session. Trouble starts at the yellow block near the
+beginning and surfaces as the red one fifty steps later — which is the whole argument in
+one picture. Recorded steps are solid; inference is a translucent arc that fades with
+confidence, because a guess must not look more convincing for having perspective.
+
+Both screenshots are taken by [`scripts/render_ui.mjs`](scripts/render_ui.mjs) driving a
+real browser against a real recorded run, for the same reason the terminal images are
+rendered from real output.
 
 ## Install
 

@@ -53,3 +53,6 @@ packages/runopsy-server/src/runopsy_server/static/
 # purpose. Ignored so it cannot be committed back by accident.
 runopsy-proje-tasarim-belgesi.pdf
 *.pdf
+
+# Playwright browsers are downloaded, not committed
+ms-playwright/

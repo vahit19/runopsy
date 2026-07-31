@@ -31,13 +31,15 @@ const ROLE_COLOR: Record<Role, string> = {
   plain: "#b9c2d0",
 };
 
-// Trouble literally raises the step: a run with no findings is a flat road.
+// Trouble literally raises the step: a run with no findings is a flat road. The spread
+// is deliberately wide — seen from the distance a fifty-step run needs, a difference of
+// half a unit is invisible, and a signal you cannot see is not a signal.
 const ROLE_HEIGHT: Record<Role, number> = {
-  onset: 1.6,
-  failure: 1.6,
-  affected: 0.7,
-  candidate: 1.1,
-  plain: 0.4,
+  onset: 6.0,
+  failure: 5.0,
+  affected: 1.6,
+  candidate: 3.0,
+  plain: 0.5,
 };
 
 function roleOf(
@@ -122,19 +124,34 @@ function PropagationArc({
   );
 }
 
-/** Gentle orbit around the timeline; a static 3D view is a worse 2D view. */
+/** Gentle orbit around the timeline; a static 3D view is a worse 2D view.
+ *
+ * The orbit distance scales with the length of the run. A fixed radius framed a
+ * forty-step run as a corridor receding to a vanishing point: the onset sat at the far
+ * end as a few pixels, the propagation arcs were off-screen, and the picture showed
+ * nothing the 2D map does not show better. A view that has to be readable at fifty
+ * steps cannot be framed for five.
+ */
 function Rig({ length }: { length: number }) {
   const { camera } = useThree();
-  const angle = useRef(0);
+  const angle = useRef(0.6);
+  const span = Math.max(length, 6) * STEP_SPACING;
+
   useFrame((_, delta) => {
-    angle.current += delta * 0.08;
-    const middle = (-length * STEP_SPACING) / 2;
+    angle.current += delta * 0.06;
+    const middle = -span / 2;
+    // Framed from above rather than from the end. A long run seen along its own axis is
+    // a corridor: the first steps fill the frame and the last are a vanishing point, so
+    // the onset — which is usually early — falls off the near edge entirely. Looking
+    // down at it turns the run into a line across the ground, where every step is
+    // visible at once and the raised ones still read as raised.
+    const radius = span * 0.42 + 8;
     camera.position.set(
-      Math.sin(angle.current) * 9,
-      5.5,
-      middle + Math.cos(angle.current) * 11,
+      Math.sin(angle.current) * radius,
+      span * 0.78 + 6,
+      middle + Math.cos(angle.current) * radius,
     );
-    camera.lookAt(0, 0.5, middle);
+    camera.lookAt(0, 0, middle);
   });
   return null;
 }
