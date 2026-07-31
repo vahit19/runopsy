@@ -41,6 +41,8 @@ A third change was tried and **reverted after measuring it.** A loop is attribut
 
 6. **The most basic detector was blind on the primary runtime.** Hermes reports whether the *tool* ran, not whether the command it ran succeeded: its terminal tool returns `{"output": ..., "exit_code": N}` and reports status `ok` whenever the shell was invoked at all. A test suite failing on every attempt was recorded as a run of successful steps — twenty-one of them in one session — so the L0 failed-call detector had nothing to fire on. The mapper now reads `exit_code` out of a structured result, and only a structured one: inferring failure from prose would manufacture findings. Same trace, before and after: a handful of candidates became twenty-two, including every failing test run.
 
+**Recording under parallelism was broken and is the one defect nobody would have reported.** Every test and every live session so far recorded one step at a time. An agent that delegates to parallel subagents does not: it fires a `runopsy hook` process per event, several within the same millisecond. Thirty-two concurrent hooks against one store lost twelve events, silently — a hook's first duty is not to break the run it observes, so it swallowed the error and exited zero, and the run looked recorded. Three separate faults, each invisible while the others were present: dedup queried the index *before* the journal append, so a locked database discarded the event before anything durable existed; opening the collector connects to the index, so contention failed the write path outright; and step numbers came from `SELECT MAX(sequence) + 1`, which two subagents in one session — what Hermes subagents actually are — took simultaneously, producing one event id for two steps and deduplicating the second away. Thirty-two of thirty-two now, pinned by `tests/test_concurrency.py`, which launches real subprocesses because none of this is visible in-process.
+
 **Which detectors real data has actually exercised**, measured on 31 July 2026 across every live session recorded. Of fifteen, **three** have ever produced a finding on a real trace: `structural:tool_execution`, `behavioral:tool_loop`, `structural:incomplete_run`. That is the honest shape of the evidence behind this engine, and it should be read before anyone quotes the benchmark as though it covered everything.
 
 The twelve that have not fired split three ways, and the difference matters:
@@ -67,7 +69,7 @@ Measured onset localization, reproducible via `runopsy bench --compare` and reco
 
 ```bash
 uv sync                       # install; pins Python 3.12 via .python-version
-uv run pytest                 # ~590 tests, ~100s; coverage gate is 85%
+uv run pytest                 # ~830 tests, ~130s; coverage gate is 85%
 uv run pytest tests/test_diagnose.py::TestConfidence   # one class
 uv run ruff check . && uv run ruff format .
 # Every package, named explicitly: the CI matrix runs bash and PowerShell, and
@@ -317,5 +319,6 @@ These are encoded in code and tests, not conventions. If one starts failing, the
 - No output path asserts causation for an unvalidated finding (`runopsy_cli.language.asserts_causation` guards this).
 - The side-effect gate fails closed: an unrecognised tool needs human approval.
 - A healthy run produces no finding. The false-positive rate is exactly zero, not approximately.
-- The JSONL journal is authoritative; the DuckDB index is rebuildable from it.
+- The JSONL journal is authoritative; the DuckDB index is rebuildable from it. Recording writes the journal **first** and survives an index failure, and reading reconciles the index against the journals rather than trusting it. Neither half is optional: DuckDB admits a single writing process, so an adapter that spawns a process per event will lose index writes as a matter of course, and an invariant nothing acts on is a comment.
+- A step number is an identity, not a label — an adapter builds the event id out of it — so allocation goes through `SequenceAllocator` under a file lock. Two events sharing a number are one event to every layer downstream, and the second is deduplicated out of the trace without anything reporting a loss.
 - Diagnosis is a pure function of the trace — no clock, no network, no model — so the same run always yields the same bundle.
