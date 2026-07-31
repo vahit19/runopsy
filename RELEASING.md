@@ -27,18 +27,25 @@ Push to a **private** repository first if you want the workflows observed before
 is public. Actions run on private repositories, and making one public later is a single
 setting; making a public one private again does not un-publish what was fetched.
 
+## Claim the names first
+
+The distribution names must exist on PyPI before the first tag, and `runopsy` is the one
+that matters: it is the only name anyone will guess, and on a public index an unclaimed
+name can be taken by someone else. Ten distributions publish from this repository —
+`runopsy` plus the nine it is built from.
+
 ## One-time setup on PyPI
 
 The publish job uses **trusted publishing**, so there is no API token in repository
 secrets to leak. That means PyPI has to be told which workflow it trusts, and until it is
 told, the job fails at the last step with an authentication error.
 
-For each of the eight distributions, on PyPI under *Publishing → Add a pending
+For each of the ten distributions, on PyPI under *Publishing → Add a pending
 publisher*:
 
 | field | value |
 | --- | --- |
-| PyPI project name | `runopsy-core`, `runopsy-collector`, … (one entry per package) |
+| PyPI project name | `runopsy` first, then `runopsy-core`, `runopsy-cli`, … (one entry each) |
 | Owner | your GitHub account or organisation |
 | Repository name | `runopsy` |
 | Workflow name | `release.yml` |

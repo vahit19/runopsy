@@ -8,6 +8,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "runopsy",
     "runopsy-adapter",
     "runopsy-bench",
     "runopsy-cli",
@@ -2649,6 +2650,32 @@ wheels = [
 ]
 
 [[package]]
+name = "runopsy"
+version = "0.1.0"
+source = { editable = "packages/runopsy" }
+dependencies = [
+    { name = "runopsy-cli" },
+    { name = "runopsy-server" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "runopsy-inspect" },
+]
+inspect = [
+    { name = "runopsy-inspect" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "runopsy-cli", editable = "packages/runopsy-cli" },
+    { name = "runopsy-inspect", marker = "extra == 'all'", editable = "packages/runopsy-inspect" },
+    { name = "runopsy-inspect", marker = "extra == 'inspect'", editable = "packages/runopsy-inspect" },
+    { name = "runopsy-server", editable = "packages/runopsy-server" },
+]
+provides-extras = ["inspect", "all"]
+
+[[package]]
 name = "runopsy-adapter"
 version = "0.1.0"
 source = { editable = "packages/runopsy-adapter" }
@@ -2814,6 +2841,7 @@ name = "runopsy-workspace"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "runopsy" },
     { name = "runopsy-adapter" },
     { name = "runopsy-bench" },
     { name = "runopsy-cli" },
@@ -2842,6 +2870,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "runopsy", editable = "packages/runopsy" },
     { name = "runopsy-adapter", editable = "packages/runopsy-adapter" },
     { name = "runopsy-bench", editable = "packages/runopsy-bench" },
     { name = "runopsy-cli", editable = "packages/runopsy-cli" },

@@ -8,7 +8,7 @@ The ten-item first sprint from section 24 of the design document is complete. Th
 
 `runopsy-proje-tasarim-belgesi.pdf` — the 39-page Turkish design document (v0.2, 30 July 2026) — remains the single source of truth. For anything this file does not cover, read the PDF rather than inventing an approach.
 
-**Shipped**, ten packages: `runopsy-core` (schema, normalizer, 15 detectors, impact, ranking, diagnosis, structured logging, OpenInference/OTLP export) · `runopsy-collector` (JSONL journals, DuckDB index, payload vault, retention) · `runopsy-cli` (14 commands, see *Interfaces*) · `runopsy-replay` (planning **and** counterfactual execution behind a fail-closed side-effect gate) · `runopsy-bench` (20 labelled cases, metrics, baselines, fault injection, performance) · `runopsy-adapter` (shell + Hermes, verified against hermes-agent 0.19.0) · `runopsy-semantic` (L3, budget-capped, opt-in) · `runopsy-server` (FastAPI, loopback, serves the built web view) · `runopsy-ui` (React + TypeScript + Vite + XYFlow, the 2D timeline and failure map) · `runopsy-inspect` (reads Inspect AI eval logs into traces).
+**Shipped**, eleven packages. `runopsy` is the meta-distribution `pip install runopsy` resolves to — it depends on `runopsy-cli` and `runopsy-server` at pinned versions and is what makes `uv tool install runopsy` and `uvx runopsy` work; the nine below it are the real code, so a library user can depend on just the piece they need: `runopsy-core` (schema, normalizer, 15 detectors, impact, ranking, diagnosis, structured logging, OpenInference/OTLP export) · `runopsy-collector` (JSONL journals, DuckDB index, payload vault, retention) · `runopsy-cli` (14 commands, see *Interfaces*) · `runopsy-replay` (planning **and** counterfactual execution behind a fail-closed side-effect gate) · `runopsy-bench` (20 labelled cases, metrics, baselines, fault injection, performance) · `runopsy-adapter` (shell + Hermes, verified against hermes-agent 0.19.0) · `runopsy-semantic` (L3, budget-capped, opt-in) · `runopsy-server` (FastAPI, loopback, serves the built web view) · `runopsy-ui` (React + TypeScript + Vite + XYFlow, the 2D timeline and failure map) · `runopsy-inspect` (reads Inspect AI eval logs into traces).
 
 Replay execution runs a counterfactual experiment in a sandbox copy; a supporting result upgrades a candidate to `replay_supported`, including creating one at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
 
@@ -65,7 +65,7 @@ uv run mypy packages/runopsy-core/src packages/runopsy-collector/src \
             packages/runopsy-cli/src packages/runopsy-bench/src \
             packages/runopsy-replay/src packages/runopsy-adapter/src \
             packages/runopsy-semantic/src packages/runopsy-server/src \
-            packages/runopsy-inspect/src tests
+            packages/runopsy-inspect/src packages/runopsy/src tests
 uv run bandit -c pyproject.toml -r packages -q   # exits non-zero on any finding
 uv run python examples/coding_failure/seed.py   # seed the demo trace
 uv run python examples/multi_agent_handoff/seed.py   # a handoff that dropped the brief

@@ -65,14 +65,37 @@ product.
 
 ## Install
 
-Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
-
 ```bash
-git clone https://github.com/vahit19/runopsy && cd runopsy
-uv sync
+uv tool install runopsy      # recommended
+pipx install runopsy         # same thing, if you have pipx
+pip install runopsy          # into the current environment
 ```
 
+Needs Python 3.12 or later and nothing else. No account, no provider key, no daemon —
+`runopsy diagnose` makes zero network calls.
+
+Run it once without installing anything:
+
+```bash
+uvx runopsy --help
+```
+
+Optional extras:
+
+```bash
+pip install "runopsy[inspect]"   # read Inspect AI eval logs
+```
+
+Working on Runopsy itself? Clone it and `uv sync`; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Try it in one minute
+
+```bash
+uvx runopsy record -s "echo building" -s "exit 1" -s "echo deploying"
+uvx runopsy diagnose latest
+```
+
+Or seed the worked example from the design document:
 
 ```bash
 uv run python examples/coding_failure/seed.py     # a demo trace

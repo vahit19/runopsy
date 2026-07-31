@@ -51,7 +51,7 @@ jobs:
              packages/runopsy-cli/src packages/runopsy-bench/src
              packages/runopsy-replay/src packages/runopsy-adapter/src
              packages/runopsy-semantic/src packages/runopsy-server/src
-             packages/runopsy-inspect/src tests
+             packages/runopsy-inspect/src packages/runopsy/src tests
 
       - name: Test
         run: uv run coverage run -m pytest

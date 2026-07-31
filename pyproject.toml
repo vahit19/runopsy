@@ -13,6 +13,7 @@ dependencies = [
     "runopsy-semantic",
     "runopsy-server",
     "runopsy-inspect",
+    "runopsy",
 ]
 
 [tool.uv]
@@ -34,6 +35,7 @@ runopsy-adapter = { workspace = true }
 runopsy-semantic = { workspace = true }
 runopsy-server = { workspace = true }
 runopsy-inspect = { workspace = true }
+runopsy = { workspace = true }
 
 [dependency-groups]
 dev = [

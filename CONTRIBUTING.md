@@ -15,7 +15,7 @@ uv run mypy packages/runopsy-core/src packages/runopsy-collector/src \
             packages/runopsy-cli/src packages/runopsy-bench/src \
             packages/runopsy-replay/src packages/runopsy-adapter/src \
             packages/runopsy-semantic/src packages/runopsy-server/src \
-            packages/runopsy-inspect/src tests
+            packages/runopsy-inspect/src packages/runopsy/src tests
 uv run runopsy bench --compare
 ```
 

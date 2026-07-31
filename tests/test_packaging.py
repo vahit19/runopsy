@@ -125,6 +125,50 @@ class TestWhatAPublishedWheelWillSay:
         assert markers, f"{package} claims Typing :: Typed but ships no py.typed"
 
 
+class TestWhatPipInstallRunopsyGives:
+    """The meta-distribution, which is the only name anyone will guess.
+
+    Nine packages shipped and none of them was called `runopsy`, so the obvious command
+    installed nothing of ours — and on a public index an unclaimed name is worse than
+    missing, because somebody else can take it.
+    """
+
+    def manifest(self) -> dict[str, Any]:
+        path = ROOT / "packages" / "runopsy" / "pyproject.toml"
+        project: dict[str, Any] = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
+        return project
+
+    def test_the_obvious_name_exists(self) -> None:
+        assert self.manifest()["name"] == "runopsy"
+
+    def test_it_installs_the_whole_local_product(self) -> None:
+        """Offline, no provider key: the CLI and the web view, not a stub."""
+        dependencies = " ".join(self.manifest()["dependencies"])
+
+        assert "runopsy-cli" in dependencies
+        assert "runopsy-server" in dependencies
+
+    def test_versions_are_pinned_exactly(self) -> None:
+        """A meta-package whose parts can drift apart is a support burden, not a
+        convenience: `runopsy` 0.1.0 must mean one known set of wheels."""
+        for requirement in self.manifest()["dependencies"]:
+            assert "==" in requirement, f"{requirement} is not pinned"
+
+    def test_the_heavy_optional_dependency_stays_optional(self) -> None:
+        """inspect-ai is large and most CLI users will never read an eval log."""
+        extras = self.manifest()["optional-dependencies"]
+
+        assert "inspect" in extras
+        assert not any("runopsy-inspect" in item for item in self.manifest()["dependencies"])
+
+    def test_it_ships_the_command_people_will_type(self) -> None:
+        cli = tomllib.loads(
+            (ROOT / "packages" / "runopsy-cli" / "pyproject.toml").read_text(encoding="utf-8")
+        )
+
+        assert cli["project"]["scripts"]["runopsy"] == "runopsy_cli.main:app"
+
+
 class TestTheGatesCannotBeSkippedByAccident:
     def test_type_checking_covers_the_tests_too(self) -> None:
         """Tests are where the type errors that matter tend to be written."""
