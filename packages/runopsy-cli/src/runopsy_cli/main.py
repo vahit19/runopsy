@@ -1211,6 +1211,71 @@ def prune(
     )
 
 
+def _integrity_anomalies(collector: Collector) -> list[str]:
+    """One line per run whose journal is not a clean, ordered, gapless stream.
+
+    Read from the journals rather than the index, because the index deduplicates by
+    event id and would therefore hide exactly the damage this exists to find.
+    """
+    anomalies: list[str] = []
+    for run_id in collector.paths.known_run_ids():
+        try:
+            report = collector.integrity(run_id)
+        except Exception as error:  # a journal that will not parse is itself the finding
+            anomalies.append(f"{run_id}: unreadable ({type(error).__name__})")
+            continue
+
+        faults: list[str] = []
+        if report.duplicate_sequences:
+            faults.append(f"{len(report.duplicate_sequences)} duplicate step number(s)")
+        if report.missing_sequences and _runopsy_recorded(collector, run_id):
+            # Only damage in a run Runopsy numbered itself, where the allocator hands
+            # out consecutive values and a gap means a process died holding one. A
+            # constructed or trimmed journal is legitimately non-contiguous — the
+            # integrity check is documented to allow exactly that — so reporting its
+            # gaps as faults would make `doctor` cry wolf over every example trace.
+            faults.append(f"{len(report.missing_sequences)} missing step(s)")
+        if report.out_of_order:
+            faults.append("out of order")
+        if report.foreign_run_ids:
+            faults.append(f"events from {len(report.foreign_run_ids)} other run(s)")
+        if faults:
+            anomalies.append(f"{run_id}: {', '.join(faults)}")
+    return anomalies
+
+
+def _runopsy_recorded(collector: Collector, run_id: str) -> bool:
+    """Whether this run's step numbers came from Runopsy's allocator.
+
+    The counter file is the evidence. A journal written by an adapter through the
+    collector has one; a journal built by hand, imported, or trimmed does not — and the
+    difference decides whether a gap in the numbering is a lost event or a deliberate
+    window.
+    """
+    from runopsy_collector.sequence import COUNTER_NAME
+
+    return (collector.paths.run_dir(run_id) / COUNTER_NAME).exists()
+
+
+def _describe_index(reindexed: int) -> str:
+    """Whether the index had fallen behind the journals, and by how much.
+
+    Recording tolerates a lost index write — DuckDB admits one writing process, so
+    parallel subagents will sometimes lose one — and reading repairs it. Saying so is
+    the point: a number here is normal, and a large one every time means something is
+    holding the database open.
+    """
+    if reindexed == 0:
+        return "in step with the journals"
+    return f"was behind; reindexed {reindexed} event(s) from the journals"
+
+
+def _describe_integrity(anomalies: list[str]) -> str:
+    if not anomalies:
+        return "no gaps, duplicates or reordering"
+    return "\n".join(anomalies)
+
+
 @app.command()
 def doctor(store: StoreOption = None) -> None:
     """Report what is configured, without revealing any secret.
@@ -1222,11 +1287,15 @@ def doctor(store: StoreOption = None) -> None:
     with Collector.open(store) as collector:
         paths = collector.paths
         run_count = len(collector.runs())
+        reindexed = collector.reconcile_all()
+        anomalies = _integrity_anomalies(collector)
 
     table = Table(box=None, pad_edge=False, show_header=False)
     table.add_row("store", str(paths.root))
     table.add_row("database", "present" if paths.database.exists() else "not created yet")
     table.add_row("runs recorded", str(run_count))
+    table.add_row("index", _describe_index(reindexed))
+    table.add_row("journals", _describe_integrity(anomalies))
     table.add_row("detectors", f"{len(default_registry())} deterministic")
 
     # Reported by presence and source only. A key printed to a terminal is a key in

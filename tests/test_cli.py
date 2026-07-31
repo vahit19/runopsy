@@ -35,6 +35,22 @@ def tool(sequence: int, *, name: str = "terminal", exit_code: int = 0) -> ToolCa
     )
 
 
+def _journal_holding(tmp_path: Path, sequences: tuple[int, ...]) -> Path:
+    """A store whose only run is a journal written straight to disk.
+
+    Written rather than recorded, because the point of these cases is a journal the
+    collector never numbered: the index would deduplicate a repeated step number away,
+    and the allocator would refuse to produce one.
+    """
+    from runopsy_collector import StorePaths, serialize
+
+    store = tmp_path / "store"
+    journal = StorePaths.resolve(store).journal(RUN)
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    journal.write_bytes(b"".join(serialize(tool(sequence)) for sequence in sequences))
+    return store
+
+
 def failing_run() -> list[Event]:
     return [
         run_start(RUN, task="fix the failing integration test"),
@@ -238,6 +254,52 @@ class TestRunsAndDoctor:
 
         assert "detectors" in output
         assert "deterministic" in output
+
+    def test_doctor_reports_a_healthy_store_as_healthy(self, store: Path) -> None:
+        output = invoke("doctor", "--store", str(store))
+
+        assert "in step with the journals" in output
+        assert "no gaps, duplicates or reordering" in output
+
+    def test_doctor_names_the_run_whose_journal_is_damaged(self, tmp_path: Path) -> None:
+        """The check reads the journals, not the index.
+
+        The index deduplicates by event id, so asking it about duplicate steps would
+        hide precisely the damage this exists to find.
+        """
+        store = _journal_holding(tmp_path, (0, 1, 1, 3))
+
+        output = invoke("doctor", "--store", str(store))
+
+        assert RUN in output
+        assert "duplicate step" in output
+
+    def test_doctor_does_not_call_a_trimmed_window_damaged(self, tmp_path: Path) -> None:
+        """Non-contiguous numbering is legitimate in a journal Runopsy did not number.
+
+        Every example and benchmark trace is built by hand at the step numbers that tell
+        the story, and the integrity check is documented to allow a deliberately trimmed
+        window. Calling those gaps damage would have `doctor` crying wolf on the demo
+        store, which is the first thing a new user runs it against.
+        """
+        store = _journal_holding(tmp_path, (0, 9, 14))
+
+        output = invoke("doctor", "--store", str(store))
+
+        assert "missing step" not in output
+
+    def test_doctor_reports_a_gap_in_a_run_runopsy_numbered_itself(self, tmp_path: Path) -> None:
+        """Where the allocator hands out consecutive values, a gap is a lost event."""
+        from runopsy_collector.sequence import COUNTER_NAME
+
+        store = _journal_holding(tmp_path, (0, 9, 14))
+        from runopsy_collector import StorePaths
+
+        (StorePaths.resolve(store).run_dir(RUN) / COUNTER_NAME).write_text("15")
+
+        output = invoke("doctor", "--store", str(store))
+
+        assert "missing step" in output
 
     def test_doctor_never_prints_a_key(
         self, store: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
