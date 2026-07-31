@@ -21,3 +21,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/runopsy_server"]
+# The built web view, when it exists. It is produced by `npm run build` in
+# packages/runopsy-ui immediately before packaging and is not in version control, so
+# installing this wheel gives a working UI without a Node toolchain — while a source
+# checkout that never ran the build still serves the plain index instead.
+artifacts = ["src/runopsy_server/static/**"]

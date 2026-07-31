@@ -125,7 +125,7 @@ reported as reproduction, never as causation.
 | `runopsy graph` | the run as a timeline; `--format dot` for Graphviz |
 | `runopsy adapter hermes status` | check the runtime is really wired and recording |
 | `runopsy prune` | delete traces past the retention window |
-| `runopsy ui` | a local web view, loopback only |
+| `runopsy ui` | the React timeline and failure map, loopback only |
 | `runopsy bench [--compare\|--inject]` | score the engine against labelled traces |
 | `runopsy config --init` | write a commented `runopsy.toml` |
 | `runopsy setup` | store a provider key in the OS keyring |
@@ -208,9 +208,21 @@ diagnosis of a trace we misunderstood.
 Measured at scale with `runopsy bench --perf`: 100,000 events ingest in about three
 seconds and every stage stays roughly linear.
 
-Not built yet: a React UI beyond the served HTML report, the opt-in real-run corpus
-(section 17.1 layer four), and publication to PyPI — see
-[RELEASING.md](RELEASING.md) for what publishing still needs.
+Not built yet: the optional 3D view (the design puts it last, behind the 2D one), the
+Inspect AI harness, the opt-in real-run corpus (section 17.1 layer four), and
+publication to PyPI — see [RELEASING.md](RELEASING.md) for what publishing still needs.
+
+## The web view
+
+```bash
+cd packages/runopsy-ui && npm install && npm run build
+uv run runopsy ui            # then open the printed loopback address
+```
+
+The build writes into the server package, which mounts it at `/`. It is not committed:
+releases bundle it into the wheel, and a source checkout that skips the build gets a
+plain server-rendered index instead. A diagnosis tool should not go dark because nobody
+ran a JavaScript build.
 
 ## Contributing
 

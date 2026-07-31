@@ -24,6 +24,7 @@ from typing import Any, Final, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from runopsy_cli.report import render_report
@@ -115,8 +116,14 @@ def _analyse(collector: Collector, run_id: str) -> tuple[AnalysisContext, Diagno
     return context, bundle
 
 
-def create_app(store: Path | None = None) -> FastAPI:
-    """Build the API over one store."""
+def create_app(store: Path | None = None, *, serve_ui: bool = True) -> FastAPI:
+    """Build the API over one store.
+
+    ``serve_ui`` decides whether the built React view is mounted at ``/``. Turning it
+    off leaves the plain server-rendered index, which is the no-JavaScript fallback and
+    the thing worth keeping working: a diagnosis tool that shows nothing without a
+    front-end build has made itself hardest to reach at the moment it is most needed.
+    """
     api = FastAPI(
         title="Runopsy",
         version=__version__,
@@ -303,9 +310,23 @@ def create_app(store: Path | None = None) -> FastAPI:
         summary = collector.store.run(run_id)
         return HTMLResponse(render_report(bundle, context.graph, summary, redact=True))
 
+    static = Path(__file__).parent / "static"
+    if serve_ui and (static / "index.html").is_file():
+        # The built React view, when it has been built. Mounted last so every /v1 route
+        # above still wins, and behind a check so the server keeps working from a source
+        # checkout where nobody has run `npm run build` — the Python side must never
+        # depend on a Node toolchain being present.
+        api.mount("/", StaticFiles(directory=static, html=True), name="ui")
+        return api
+
     @api.get("/", response_class=HTMLResponse)
     def index(collector: Collector = Depends(store_dep)) -> HTMLResponse:
-        """A plain index of recorded runs, linking to each report."""
+        """A plain index of recorded runs, linking to each report.
+
+        The fallback when the React view has not been built. Deliberately kept rather
+        than deleted: a diagnosis tool that shows nothing without a JavaScript build has
+        made itself harder to reach at the moment it is most needed.
+        """
         runs = collector.runs()
         rows = "".join(
             f'<li><a href="/v1/runs/{run.run_id}/report">{run.run_id}</a>'

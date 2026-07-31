@@ -58,6 +58,29 @@ jobs:
       - name: Coverage
         run: uv run coverage report
 
+  web:
+    name: web UI types and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/runopsy-ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/runopsy-ui/package-lock.json
+
+      - run: npm ci
+
+      # Strict TypeScript is the only check this package has; there is no test suite
+      # here yet, and a view that fails to compile is a view nobody can open.
+      - run: npm run typecheck
+
+      - run: npm run build
+
   benchmark:
     name: localization benchmark
     runs-on: ubuntu-latest
@@ -94,6 +117,8 @@ jobs:
       - name: Build every package
         run: |
           for package in packages/*/; do
+            # runopsy-ui is a Node package and ships inside runopsy-server, not as a wheel.
+            [ -f "$package/pyproject.toml" ] || continue
             echo "::group::$package"
             uv build "$package" --out-dir dist
             echo "::endgroup::"

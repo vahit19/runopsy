@@ -238,6 +238,52 @@ class TestTheEventStream:
         assert "event: end" in body
 
 
+class TestTheContractTheWebViewReliesOn:
+    """Field names `packages/runopsy-ui` reads, pinned from this side.
+
+    The UI is a separate package in a different language, so nothing else stops a
+    rename here from turning that view blank. These are not decorative assertions: they
+    are the interface, and the failure they prevent is silent everywhere except on
+    somebody's screen.
+    """
+
+    def test_a_run_summary_carries_what_the_selector_shows(self, client: TestClient) -> None:
+        run = client.get("/v1/runs").json()[0]
+
+        assert {"run_id", "task", "runtime", "outcome", "event_count", "finished"} <= set(run)
+
+    def test_graph_keeps_observed_and_inferred_edges_apart(self, client: TestClient) -> None:
+        """The distinction the whole product rests on, carried in the field names."""
+        graph = client.get(f"/v1/runs/{RUN}/graph").json()
+
+        assert {"nodes", "edges", "inferred_edges"} <= set(graph)
+        assert all(edge["kind"] != "affects" for edge in graph["edges"])
+
+    def test_a_node_has_the_fields_the_map_draws(self, client: TestClient) -> None:
+        node = client.get(f"/v1/runs/{RUN}/graph").json()["nodes"][0]
+
+        assert {"node_id", "kind", "sequence", "label", "timestamp", "attributes"} <= set(node)
+
+    def test_precedes_is_the_edge_kind_the_map_filters_on(self, client: TestClient) -> None:
+        kinds = {edge["kind"] for edge in client.get(f"/v1/runs/{RUN}/graph").json()["edges"]}
+
+        assert "precedes" in kinds
+
+    def test_a_candidate_carries_its_confidence_and_reasoning(self, client: TestClient) -> None:
+        diagnosis = client.post(f"/v1/runs/{RUN}/diagnose").json()
+
+        assert {"diagnosis_id", "observed_failure_node_id", "candidates"} <= set(diagnosis)
+        assert {
+            "onset_node_id",
+            "status",
+            "confidence",
+            "summary",
+            "affected_node_ids",
+            "signal_ids",
+            "score_breakdown",
+        } <= set(diagnosis["candidates"][0])
+
+
 class TestIngest:
     def test_events_can_be_recorded_over_http(self, client: TestClient, store: Path) -> None:
         event = tool(9, name="extra").model_dump(mode="json")
@@ -275,13 +321,28 @@ class TestReportSurface:
 
         assert "[redacted]" in body
 
-    def test_the_index_lists_runs_and_states_the_limits(self, client: TestClient) -> None:
-        body = client.get("/").text
+    def test_the_index_lists_runs_and_states_the_limits(self, store: Path) -> None:
+        """The no-JavaScript fallback, which must keep working on its own."""
+        plain = TestClient(create_app(store, serve_ui=False))
+
+        body = plain.get("/").text
 
         assert RUN in body
         assert "Replay execution is not available here" in body
 
     def test_an_empty_store_still_renders_an_index(self, tmp_path: Path) -> None:
-        empty = TestClient(create_app(tmp_path / "empty"))
+        empty = TestClient(create_app(tmp_path / "empty", serve_ui=False))
 
         assert "No runs recorded yet" in empty.get("/").text
+
+    def test_the_built_view_is_served_at_the_root_when_present(self, store: Path) -> None:
+        """Mounted last, so every /v1 route still wins over the single-page app."""
+        from runopsy_server import app as module
+
+        if not (Path(module.__file__).parent / "static" / "index.html").is_file():
+            pytest.skip("the React view has not been built")
+
+        client = TestClient(create_app(store))
+
+        assert client.get("/").status_code == 200
+        assert client.get("/v1/health").json()["status"] == "ok"

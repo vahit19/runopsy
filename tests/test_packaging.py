@@ -19,7 +19,14 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGES = sorted(path.name for path in (ROOT / "packages").iterdir() if path.is_dir())
+PACKAGES = sorted(
+    path.name
+    for path in (ROOT / "packages").iterdir()
+    # A pyproject is what makes a directory here a Python package. `runopsy-ui` is a
+    # Node one: it belongs under packages/ because it is a component of the product,
+    # and it is checked by its own CI job rather than by mypy.
+    if path.is_dir() and (path / "pyproject.toml").is_file()
+)
 
 
 def workflow(name: str) -> str:

@@ -54,9 +54,24 @@ jobs:
             exit 1
           fi
 
+      # The wheel carries the built web view, so `pip install runopsy-server` gives a
+      # working UI without a Node toolchain on the user's machine. The build output is
+      # not committed; it is produced here, immediately before packaging.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/runopsy-ui/package-lock.json
+
+      - name: Build the web view into the server package
+        run: npm ci && npm run build
+        working-directory: packages/runopsy-ui
+
       - name: Build every package
         run: |
           for package in packages/*/; do
+            # runopsy-ui is a Node package; it ships inside runopsy-server, not as a wheel.
+            [ -f "$package/pyproject.toml" ] || continue
             uv build "$package" --out-dir dist
           done
 

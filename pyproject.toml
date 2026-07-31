@@ -19,6 +19,9 @@ package = false
 
 [tool.uv.workspace]
 members = ["packages/*"]
+# runopsy-ui is a Node package. It lives under packages/ because it is one of the
+# product's components, not because Python should try to resolve it.
+exclude = ["packages/runopsy-ui"]
 
 [tool.uv.sources]
 runopsy-core = { workspace = true }

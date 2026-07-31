@@ -41,3 +41,10 @@ packages/runopsy-ui/dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Web UI
+node_modules/
+# Built by `npm run build` in packages/runopsy-ui and bundled into the wheel at release
+# time. Not committed: a source checkout falls back to the server-rendered index, so the
+# Python side never needs a Node toolchain to be useful.
+packages/runopsy-server/src/runopsy_server/static/
