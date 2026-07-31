@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from runopsy_adapter.recorder import EventSink, PayloadStore, RunRecorder
+from runopsy_adapter.repo import Observation, RepositoryWatch
 from runopsy_core.schema import CallStatus, RunOutcome
 
 ADAPTER_NAME = "shell"
@@ -58,6 +59,32 @@ def _tool_name(command: str) -> str:
     return Path(parts[0].strip("\"'")).stem or "command"
 
 
+def _look(watch: RepositoryWatch | None, cwd: Path) -> Observation | None:
+    """Observe the repository, or decide there is nothing to say.
+
+    Swallows everything. Watching the working tree is an enrichment of the trace, and an
+    enrichment that can stop a pipeline is a defect: the command already ran, and its
+    result is the thing the user asked to record.
+    """
+    if watch is None:
+        return None
+    try:
+        return watch.observe(cwd)
+    except Exception:
+        return None
+
+
+def _observe_repository(recorder: RunRecorder, watch: RepositoryWatch | None, cwd: Path) -> None:
+    """Record the repository as it stood before the first command ran.
+
+    Without this baseline the first step's changes have nothing to be changes *from*,
+    and a run that began on a dirty tree would look as though the agent made the mess.
+    """
+    observed = _look(watch, cwd)
+    if observed is not None:
+        recorder.state_snapshot(observed.state.values())
+
+
 def record_steps(
     commands: list[str],
     *,
@@ -68,6 +95,7 @@ def record_steps(
     cwd: Path | None = None,
     stop_on_failure: bool = False,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    capture_git: bool = True,
 ) -> tuple[StepOutcome, ...]:
     """Run each command in order, recording it, and return what happened.
 
@@ -78,13 +106,18 @@ def record_steps(
     onset is also the symptom.
     """
     outcomes: list[StepOutcome] = []
+    # In-process, so the cursor lives in memory: this adapter records a whole run without
+    # ever leaving, unlike the hook path where every event is a new process.
+    watch = RepositoryWatch() if capture_git else None
+    working_directory = cwd or Path.cwd()
 
     with RunRecorder(run_id, sink, vault=vault) as recorder:
         recorder.start_run(
             task=task,
             runtime=ADAPTER_NAME,
-            repo=Path(cwd or Path.cwd()).name,
+            repo=Path(working_directory).name,
         )
+        _observe_repository(recorder, watch, working_directory)
 
         for command in commands:
             started = time.perf_counter()
@@ -107,6 +140,9 @@ def record_steps(
                 output = f"timed out after {timeout_seconds}s"
 
             duration_ms = int((time.perf_counter() - started) * 1000)
+            # Looked at before the step is written, so the commit and branch it moved to
+            # can be carried on the step itself rather than on an event beside it.
+            observed = _look(watch, working_directory)
             node_id = recorder.tool_call(
                 _tool_name(command),
                 arguments=command,
@@ -120,7 +156,14 @@ def record_steps(
                 # detector fired on it and nominated the first step of every run as the
                 # onset. state_delta is for facts the run believes about the world, not
                 # for restating a field the event already carries.
+                #
+                # What the repository did is a different matter: it is a fact about the
+                # world rather than a restatement of the event, and it is the one thing a
+                # coding agent's trace was missing.
+                state_delta=observed.deltas if observed else None,
             )
+            if observed is not None and observed.worth_a_snapshot:
+                recorder.state_snapshot(observed.state.values())
 
             outcome = StepOutcome(
                 command=command,

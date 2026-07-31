@@ -21,8 +21,10 @@ from runopsy_core.schema import (
     DiagnosisBundle,
     DiagnosisCandidate,
     EdgeKind,
+    NodeKind,
     RunOutcome,
     TraceGraph,
+    TraceNode,
 )
 from runopsy_replay import ReplayPlan, ReplayVerdict, StepAction
 
@@ -458,6 +460,51 @@ def graph_dot(bundle: DiagnosisBundle, graph: TraceGraph) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _repository_block(body: Text, graph: TraceGraph, node: TraceNode) -> None:
+    """What the working tree looked like just after this step.
+
+    The question a coding agent's trace is asked most often is "which step changed this
+    file", and for a long time the answer had to be guessed from a command line. The
+    observation lives on its own ``state_snapshot`` node rather than on the step, so it
+    is looked up here by proximity: the nearest snapshot at or after this step, before
+    the next step begins.
+    """
+    following = [
+        candidate
+        for candidate in graph.nodes
+        if candidate.kind is NodeKind.STATE_SNAPSHOT and candidate.sequence >= node.sequence
+    ]
+    if not following:
+        return
+    snapshot = min(following, key=lambda candidate: candidate.sequence)
+
+    values = snapshot.attributes.get("values")
+    if not isinstance(values, dict) or not any(str(key).startswith("git.") for key in values):
+        return
+
+    body.append("\n  repository\n", style="dim")
+    head, branch = values.get("git.head"), values.get("git.branch")
+    if head:
+        location = f"    {str(head)[:8]}"
+        if branch:
+            location += f" on {branch}"
+        body.append(f"{location}\n", style="dim")
+
+    edits = values.get("git.edits")
+    if isinstance(edits, dict) and edits:
+        for path, counts in list(edits.items())[:20]:
+            if isinstance(counts, dict):
+                body.append(f"    +{counts.get('added', 0)} -{counts.get('removed', 0)}  {path}\n")
+            else:
+                body.append(f"    {path}\n")
+    elif values.get("git.dirty"):
+        # Untracked files have nothing to diff against, so they never reach `git.edits`.
+        for path in list(values.get("git.changed_paths") or [])[:20]:
+            body.append(f"    new  {path}\n")
+    else:
+        body.append("    working tree clean\n", style="dim")
+
+
 def evidence(
     bundle: DiagnosisBundle,
     graph: TraceGraph,
@@ -488,6 +535,8 @@ def evidence(
             continue
         body.append(f"  {key}: ", style="dim")
         body.append(f"{_format_value(value)}\n")
+
+    _repository_block(body, graph, node)
 
     candidate = next((c for c in bundle.candidates if c.onset_node_id == node_id), None)
     if candidate is None:

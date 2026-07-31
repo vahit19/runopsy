@@ -38,9 +38,10 @@ _KNOWN: dict[str, set[str]] = {
         "token_budget",
         "cost_budget_usd",
     },
-    "semantic": {"model", "max_calls", "cost_budget_usd"},
+    "semantic": {"model", "max_calls", "cost_budget_usd", "base_url", "api_style"},
     "replay": {"step_timeout_seconds", "sandbox_ignore"},
     "privacy": {"vault", "retain_days"},
+    "capture": {"git"},
 }
 
 
@@ -69,6 +70,24 @@ class RunopsyConfig:
 
     Off means replays cannot reconstruct commands — stated here because it is the
     trade the user is making, not a detail.
+    """
+
+    capture_git: bool = True
+    """Whether each step records what moved in the repository.
+
+    On by default, and free outside a repository: the observer reports "nothing to say"
+    when there is no git, no repository, or git is too slow, and recording carries on.
+    A coding agent's real output is the working tree, so a trace that does not contain it
+    cannot answer the question the tool exists for.
+    """
+
+    semantic_base_url: str = ""
+    """OpenAI-compatible chat-completions endpoint for the diagnosing model.
+
+    Empty means OpenRouter. Setting it to a local server — Ollama's
+    ``http://localhost:11434/v1/chat/completions``, llama.cpp, vLLM — is what makes the
+    semantic layer usable with no key and no data leaving the machine, which the
+    local-first promise claims and could not previously deliver.
     """
 
     warnings: tuple[str, ...] = ()
@@ -117,6 +136,7 @@ def load_config(path: Path | None = None) -> RunopsyConfig:
     replay = data.get("replay", {}) if isinstance(data.get("replay"), dict) else {}
     privacy = data.get("privacy", {}) if isinstance(data.get("privacy"), dict) else {}
     semantic = data.get("semantic", {}) if isinstance(data.get("semantic"), dict) else {}
+    capture = data.get("capture", {}) if isinstance(data.get("capture"), dict) else {}
 
     settings = DetectorSettings(
         retry_threshold=int(analysis.get("retry_threshold", 3)),
@@ -136,8 +156,10 @@ def load_config(path: Path | None = None) -> RunopsyConfig:
         semantic_model=str(semantic.get("model", DEFAULT_MODEL)),
         semantic_max_calls=int(semantic.get("max_calls", MAX_DIAGNOSTIC_CALLS)),
         semantic_cost_budget_usd=float(semantic.get("cost_budget_usd", MAX_COST_USD)),
+        semantic_base_url=str(semantic.get("base_url", "")).strip(),
         retain_days=int(privacy.get("retain_days", 0)),
         vault_enabled=bool(privacy.get("vault", True)),
+        capture_git=bool(capture.get("git", True)),
         warnings=tuple(warnings),
         source=resolved,
     )
@@ -172,6 +194,17 @@ model = "openai/gpt-4o-mini"
 # Ceilings, checked before each call rather than after.
 max_calls = 2
 cost_budget_usd = 0.10
+# Point this at any OpenAI-compatible endpoint to keep the semantic layer local
+# and key-free. Empty means OpenRouter. For Ollama:
+#   base_url = "http://localhost:11434/v1/chat/completions"
+#   model = "qwen2.5-coder"
+base_url = ""
+
+[capture]
+# Record what moved in the repository at each step: the commit, the branch, and
+# which files were dirty. Costs one "git status" per step and is skipped entirely
+# outside a repository. A coding agent's real output is the working tree.
+git = true
 
 [privacy]
 # Keep command text locally so replays can re-run it. The trace itself always

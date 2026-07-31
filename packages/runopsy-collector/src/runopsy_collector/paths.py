@@ -8,6 +8,7 @@ of the local-first promise rather than an implementation detail.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 from dataclasses import dataclass
@@ -97,6 +98,34 @@ class StorePaths:
         """Create the directory structure if it is not already present."""
         for directory in (self.root, self.runs_dir, self.artifacts_dir, self.diagnoses_dir):
             directory.mkdir(parents=True, exist_ok=True)
+        self._exclude_from_version_control()
+
+    def _exclude_from_version_control(self) -> None:
+        """Make the store invisible to the repository it sits inside.
+
+        The default store is ``.runopsy`` beside the project, which puts it inside the
+        working tree of the repository the agent is editing. That is not merely untidy.
+        Measured while recording a real run: the agent's own ``git add -A`` swept the
+        store in and then failed with exit 128, because DuckDB held the index open and
+        git could not read it. Runopsy had changed the outcome of the run it was
+        observing, which is the one thing an observer must never do.
+
+        A ``.gitignore`` containing ``*`` inside the store excludes it and everything
+        under it without touching the user's own ignore file — their repository is not
+        ours to edit. Written once, never overwritten: if somebody has deliberately
+        changed it, that decision stands.
+        """
+        marker = self.root / ".gitignore"
+        if marker.exists():
+            return
+        with contextlib.suppress(OSError):
+            marker.write_text(
+                "# Runopsy's local store. Excluded so the repository being recorded\n"
+                "# does not sweep it into a commit, and so recording cannot alter the\n"
+                "# run it is observing.\n"
+                "*\n",
+                encoding="utf-8",
+            )
 
     def known_run_ids(self) -> tuple[str, ...]:
         """Run ids discoverable on disk, independent of the database."""

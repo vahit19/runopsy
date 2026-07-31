@@ -249,14 +249,26 @@ class TestShellAdapterOnRealCommands:
         """
         sink = ListSink()
 
-        record_steps([ok(), fails(), ok(), fails()], run_id="run_x", task="t", sink=sink)
+        record_steps(
+            [ok(), fails(), ok(), fails()],
+            run_id="run_x",
+            task="t",
+            sink=sink,
+            capture_git=False,
+        )
 
         assert all(event.state_delta == {} for event in sink.events)
 
     def test_a_real_pipeline_blames_the_first_failure_not_the_first_step(self) -> None:
         sink = ListSink()
 
-        record_steps([ok(), fails(2), ok(), fails(1)], run_id="run_x", task="t", sink=sink)
+        record_steps(
+            [ok(), fails(2), ok(), fails(1)],
+            run_id="run_x",
+            task="t",
+            sink=sink,
+            capture_git=False,
+        )
         context = AnalysisContext.from_events("run_x", sink.events)
         bundle = diagnose(context)
 
@@ -298,6 +310,7 @@ class TestRealRunEndToEnd:
                 run_id="run_real",
                 task="run the pipeline",
                 sink=collector,
+                capture_git=False,
             )
             events = collector.events("run_real")
 

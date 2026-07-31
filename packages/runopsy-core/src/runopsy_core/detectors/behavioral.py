@@ -23,6 +23,7 @@ from runopsy_core.schema import (
     MemoryOperation,
     MemoryOpEvent,
     Severity,
+    StateSnapshotEvent,
     SupportStatus,
     ToolCallEvent,
 )
@@ -100,11 +101,12 @@ class ToolLoopDetector:
                 continue
             occurrences[(event.tool.name, event.tool.arguments_hash)].append(event)
 
+        timeline = _repository_timeline(context)
         threshold = context.settings.loop_threshold
         for (tool_name, _), events in occurrences.items():
             if len(events) < threshold:
                 continue
-            if not self._is_stuck(events):
+            if not self._is_stuck(events, timeline):
                 continue
             node_ids = [event.event_id for event in events]
             yield FailureSignal(
@@ -131,15 +133,61 @@ class ToolLoopDetector:
     # needs the ranker to know it is a span, not a step.
 
     @staticmethod
-    def _is_stuck(events: list[ToolCallEvent]) -> bool:
+    def _is_stuck(events: list[ToolCallEvent], timeline: dict[int, str]) -> bool:
         """Whether repeating the call kept turning up anything new."""
         if all(_tool_failed(event) for event in events):
             return True
         outputs = {event.tool.output_hash for event in events}
-        if outputs == {None}:
+        if outputs == {None} and not _reached_new_states(events, timeline):
             return True  # nothing recorded to judge progress by
         # Fewer than half the calls returned an answer not already seen.
-        return len(outputs) * 2 <= len(events)
+        if len(outputs) * 2 > len(events):
+            return False
+        # The output says stuck. Ask the repository before believing it: the very first
+        # real session recorded fired this detector on a run that succeeded, because the
+        # agent re-ran one verification command after every edit and an argument hash
+        # cannot see a file. Now the trace records what the working tree did, so the
+        # question can be asked directly.
+        #
+        # "The repository changed" would be the wrong question, and would silence a true
+        # finding: the twenty-five-step session that really was stuck rewrote a file on
+        # every one of those steps. The right question is the same one asked of outputs —
+        # is the world reaching states it has not been in before, or returning to ones it
+        # has? An agent making progress leaves a tree it has never left; an agent
+        # thrashing keeps arriving back where it was.
+        return not _reached_new_states(events, timeline)
+
+
+def _repository_timeline(context: AnalysisContext) -> dict[int, str]:
+    """What the working tree looked like at each point one was observed.
+
+    Empty for every trace that carries no repository observations, which is what keeps
+    this from touching any existing result: a runtime that reports nothing about the
+    working tree leaves the detector behaving exactly as it did before.
+    """
+    timeline: dict[int, str] = {}
+    for event in context.of_kind(StateSnapshotEvent):
+        described = {
+            key: value for key, value in event.state.values.items() if key.startswith("git.")
+        }
+        if described:
+            timeline[event.sequence] = repr(sorted(described.items(), key=lambda item: item[0]))
+    return timeline
+
+
+def _reached_new_states(events: list[ToolCallEvent], timeline: dict[int, str]) -> bool:
+    """Whether the working tree kept arriving somewhere it had not been.
+
+    Judged over the span the repeated calls cover, by the same majority rule used for
+    outputs, so the two signals cannot disagree about what "making progress" means.
+    """
+    if not timeline:
+        return False
+    first, last = events[0].sequence, events[-1].sequence
+    observed = [state for sequence, state in timeline.items() if first <= sequence <= last]
+    if len(observed) < 2:
+        return False
+    return len(set(observed)) * 2 > len(observed)
 
 
 def _tool_failed(event: ToolCallEvent) -> bool:

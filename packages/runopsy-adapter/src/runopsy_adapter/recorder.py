@@ -30,6 +30,8 @@ from runopsy_core.schema import (
     RunStartEvent,
     SecurityMetadata,
     StateChange,
+    StatePayload,
+    StateSnapshotEvent,
     TokenUsage,
     ToolCallEvent,
     ToolPayload,
@@ -174,6 +176,7 @@ class RunRecorder:
         status: CallStatus | None = None,
         retry_of: str | None = None,
         state: dict[str, object] | None = None,
+        state_delta: dict[str, StateChange] | None = None,
         parent_id: str | None = None,
     ) -> str:
         """Record an external action.
@@ -207,8 +210,35 @@ class RunRecorder:
                     status=resolved,
                     retry_of=retry_of,
                 ),
-                state_delta={key: StateChange(after=value) for key, value in (state or {}).items()},
+                state_delta={
+                    **{key: StateChange(after=value) for key, value in (state or {}).items()},
+                    # Given whole, so a caller that knows the previous value can say so.
+                    # Evidence reads better as "staging -> production" than as "production".
+                    **(state_delta or {}),
+                },
                 security=SecurityMetadata(redacted=bool(found), contains_secret=bool(found)),
+            )
+        )
+
+    def state_snapshot(self, values: dict[str, object]) -> str:
+        """Record the observed state of the world at this point in the run.
+
+        Separate from the ``state_delta`` carried on a step, and deliberately so. A delta
+        is a claim that something changed and is read by the flapping detector; a
+        snapshot is a description, read by nothing automatically. That is what makes it
+        the safe home for values which legitimately repeat — the set of modified files in
+        an edit-test-revert cycle returns to itself constantly, and as a delta it would
+        manufacture a finding on a perfectly healthy run.
+        """
+        sequence, event_id, moment = self._next()
+        return self._emit(
+            StateSnapshotEvent(
+                event_id=event_id,
+                run_id=self.run_id,
+                agent_id=self.agent_id,
+                sequence=sequence,
+                timestamp=moment,
+                state=StatePayload(values=values),
             )
         )
 

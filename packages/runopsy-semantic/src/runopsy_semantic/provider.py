@@ -12,8 +12,9 @@ suite people disable.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Final, Protocol
 
 import httpx
 
@@ -21,6 +22,27 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 API_KEY_VARIABLE = "OPENROUTER_API_KEY"
 DEFAULT_MODEL = "openai/gpt-4o-mini"
 REQUEST_TIMEOUT_SECONDS = 60.0
+
+RETRY_BACKOFF_SECONDS: Final = (0.1, 0.2, 0.4)
+"""How long to wait before each retry. Its length is how many retries there are."""
+
+MAX_ATTEMPTS: Final = len(RETRY_BACKOFF_SECONDS) + 1
+
+RETRYABLE = (httpx.TimeoutException, httpx.ConnectError)
+"""The only two failures worth trying again.
+
+Deliberately narrow, and the narrowness is the design rather than caution. Both mean the
+request did not arrive: a timeout waiting for the first byte, or a connection that was
+never established. Nothing was computed, nothing was billed, and the same request sent
+again is the same request.
+
+Everything else is excluded for a reason. An HTTP error means the provider answered, and
+a 4xx says the request is wrong — sending it three more times cannot make it right, and a
+429 answered with an immediate retry storm is how a rate limit becomes a ban. A 5xx may
+have run the model before failing, so a retry can be billed twice. A malformed response
+body is a bug, not weather. The user's money and the provider's patience are both finite,
+and this is the boundary that respects them.
+"""
 
 
 class ProviderError(RuntimeError):
@@ -85,6 +107,43 @@ class OpenRouterClient:
             "X-Title": "Runopsy",
         }
 
+    def _send(self, body: dict[str, Any]) -> httpx.Response:
+        if self._transport is not None:
+            return self._transport.post(OPENROUTER_URL, headers=self._headers(), json=body)
+        with httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+            return client.post(OPENROUTER_URL, headers=self._headers(), json=body)
+
+    def _post(self, body: dict[str, Any]) -> httpx.Response:
+        """One request, tried again only when it never arrived.
+
+        There was no retry here at all, which made the whole hybrid diagnosis a coin
+        toss against one TCP connection: a single dropped packet on a home network threw
+        away a run the user had already recorded, already analysed deterministically, and
+        already agreed to spend money on. The failure it protects against is not exotic —
+        it is the ordinary shape of a laptop's network.
+
+        Backoff is 0.1s, 0.2s, 0.4s: four attempts spanning 0.7 seconds of waiting. Short
+        enough that nobody watching the terminal decides it has hung, doubling so a
+        provider that is briefly overwhelmed is not hit at a fixed rhythm, and finite
+        because a diagnosis that never returns is worse than one that says it could not
+        reach the provider.
+        """
+        last: Exception | None = None
+        for attempt in range(MAX_ATTEMPTS):
+            try:
+                return self._send(body)
+            except RETRYABLE as error:
+                last = error
+                if attempt < len(RETRY_BACKOFF_SECONDS):
+                    time.sleep(RETRY_BACKOFF_SECONDS[attempt])
+            except httpx.HTTPError as error:
+                # Reached the provider, or failed in a way repeating cannot mend.
+                msg = f"could not reach the provider: {error}"
+                raise ProviderError(msg) from error
+
+        msg = f"could not reach the provider after {MAX_ATTEMPTS} attempts: {last}"
+        raise ProviderError(msg) from last
+
     def complete(self, system: str, user: str, *, max_output_tokens: int = 700) -> Completion:
         """Send one prompt and return the response.
 
@@ -103,15 +162,7 @@ class OpenRouterClient:
             "usage": {"include": True},
         }
 
-        try:
-            if self._transport is not None:
-                response = self._transport.post(OPENROUTER_URL, headers=self._headers(), json=body)
-            else:
-                with httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-                    response = client.post(OPENROUTER_URL, headers=self._headers(), json=body)
-        except httpx.HTTPError as error:
-            msg = f"could not reach the provider: {error}"
-            raise ProviderError(msg) from error
+        response = self._post(body)
 
         if response.status_code >= 400:
             # The body can echo request content; only the status is surfaced, so a

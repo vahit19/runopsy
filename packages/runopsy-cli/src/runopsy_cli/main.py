@@ -25,6 +25,13 @@ from runopsy_collector import Collector
 from runopsy_core import AnalysisContext, apply_replay_evidence, to_otlp_json
 from runopsy_core import diagnose as run_diagnosis
 from runopsy_core.detectors import default_registry
+from runopsy_core.schema import (
+    Event,
+    RunStartEvent,
+    StatePayload,
+    StateSnapshotEvent,
+    ToolCallEvent,
+)
 from runopsy_replay import (
     DEFAULT_SANDBOX_IGNORES,
     Intervention,
@@ -172,6 +179,7 @@ def hook_command(
 
         run = hermes.run_id_for(payload)
         try:
+            settings = _config()
             with Collector.open(store) as collector:
                 # Same vault the shell adapter fills. Without it a Hermes trace holds
                 # hashes of text that was never stored, so evidence has nothing to show,
@@ -179,10 +187,17 @@ def hook_command(
                 mapped = hermes.map_payload(
                     payload,
                     sequence=collector.next_sequence(run),
-                    vault=collector.vault if _config().vault_enabled else None,
+                    vault=collector.vault if settings.vault_enabled else None,
                 )
                 if mapped is not None:
-                    collector.record(mapped)
+                    for event_to_record in _with_repository_state(
+                        mapped,
+                        collector=collector,
+                        run=run,
+                        cwd=_text_or_none(payload.get("cwd")),
+                        enabled=settings.capture_git,
+                    ):
+                        collector.record(event_to_record)
         except Exception:
             # The index was unreachable, so opening the collector failed before anything
             # could be written. That is precisely when history matters most: an agent
@@ -202,6 +217,75 @@ def hook_command(
         print(f"runopsy: could not record {event}: {type(error).__name__}", file=sys.stderr)
 
     typer.echo(decision)
+
+
+def _text_or_none(value: object) -> str | None:
+    text = str(value).strip() if value is not None else ""
+    return text or None
+
+
+def _with_repository_state(
+    event: Event,
+    *,
+    collector: Collector,
+    run: str,
+    cwd: str | None,
+    enabled: bool,
+) -> list[Event]:
+    """The recorded event, plus what the repository did around it.
+
+    A coding agent's real output is the working tree, and a trace of commands alone
+    cannot say which step changed it — an argument hash cannot see a file. Two things
+    come back from a look at the repository.
+
+    ``git.head`` and ``git.branch`` are attached to the step as state deltas, and only
+    when they actually changed. That restraint is the whole design: emitting them every
+    step would show the flapping detector one value for a while and then another, which
+    is what an ordinary mid-run commit looks like, and it would report a healthy run.
+
+    Everything else — which files are dirty, how many, whether the tree is clean — goes
+    into a separate ``state_snapshot`` event, written only when something moved. Snapshot
+    values are not read by the flapping detector, which is why the dirty file set can
+    live there safely: an agent that edits, tests, reverts and edits again returns the
+    tree to the same state over and over, and that is ordinary work rather than
+    disagreement.
+
+    Never raises. Watching the repository is an enrichment; failing at it must not cost
+    the step that was actually being recorded.
+    """
+    if not enabled or not isinstance(event, ToolCallEvent | RunStartEvent):
+        return [event]
+
+    try:
+        from runopsy_adapter.repo import RepositoryWatch
+
+        observed = RepositoryWatch(collector.paths.run_dir(run)).observe(Path(cwd) if cwd else None)
+    except Exception:
+        return [event]
+
+    if observed is None:  # no repository, no git, or git had nothing to say
+        return [event]
+
+    recorded: list[Event] = [
+        event.model_copy(update={"state_delta": {**event.state_delta, **observed.deltas}})
+        if observed.deltas
+        else event
+    ]
+    if observed.worth_a_snapshot:
+        # One reservation, used for both the number and the id built out of it. Taking
+        # the next sequence and then writing a different one into the event id is the
+        # exact shape of the collision that cost two steps of a parallel run.
+        sequence = collector.next_sequence(run)
+        recorded.append(
+            StateSnapshotEvent(
+                event_id=f"{run}_evt_{sequence:04d}",
+                run_id=run,
+                sequence=sequence,
+                timestamp=recorded[0].timestamp,
+                state=StatePayload(values=observed.state.values()),
+            )
+        )
+    return recorded
 
 
 def _record_to_journal_only(payload: dict[str, object], run: str, store: Path | None) -> None:
@@ -431,6 +515,7 @@ def record(
         raise typer.Exit(code=2)
 
     identifier = run_id or f"run_{datetime.now(UTC):%Y%m%dT%H%M%S}"
+    settings = _config()
 
     with Collector.open(store) as collector:
         outcomes = record_steps(
@@ -438,8 +523,9 @@ def record(
             run_id=identifier,
             task=task,
             sink=collector,
-            vault=collector.vault if _config().vault_enabled else None,
+            vault=collector.vault if settings.vault_enabled else None,
             stop_on_failure=stop_on_failure,
+            capture_git=settings.capture_git,
         )
         report = collector.integrity(identifier)
 

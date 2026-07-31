@@ -27,8 +27,10 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import os
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -51,6 +53,28 @@ def payload(session: str, index: int) -> str:
             },
         }
     )
+
+
+@pytest.fixture(autouse=True)
+def _without_repository_capture(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """Count steps, not observations of the repository these tests happen to run inside.
+
+    Repository capture adds a ``state_snapshot`` beside a step whenever the working tree
+    moved, which is the point of it — and it would make every count here a count of two
+    different things. Turned off explicitly rather than worked around, so what these
+    tests assert stays "every event survived" and not "some number came out".
+    """
+    config = tmp_path_factory.mktemp("config") / "runopsy.toml"
+    config.write_text("[capture]\ngit = false\n", encoding="utf-8")
+    previous = os.environ.get("RUNOPSY_CONFIG")
+    os.environ["RUNOPSY_CONFIG"] = str(config)
+    try:
+        yield
+    finally:
+        if previous is None:
+            del os.environ["RUNOPSY_CONFIG"]
+        else:
+            os.environ["RUNOPSY_CONFIG"] = previous
 
 
 def fire_hook(store: Path, session: str, index: int) -> tuple[int, str]:

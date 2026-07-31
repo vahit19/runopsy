@@ -49,6 +49,7 @@ from runopsy_semantic import (
     to_signal,
     window_around,
 )
+from runopsy_semantic.provider import MAX_ATTEMPTS
 
 RUN = "run_sem"
 
@@ -270,8 +271,14 @@ class TestReviewSpan:
         assert ledger.cost_usd > 0
 
     def test_a_provider_failure_leaves_the_deterministic_answer_standing(self) -> None:
-        """An outage must not turn a working diagnosis into a failed command."""
-        api, _ = client(httpx.ConnectError("no network"))
+        """An outage must not turn a working diagnosis into a failed command.
+
+        The fixture raises on every permitted attempt, which is what an outage now means.
+        One refused connection is no longer one: the client retries a request that never
+        arrived, so a single raise describes a blip it is meant to survive rather than a
+        network that is down. The assertion — and the property it protects — is unchanged.
+        """
+        api, _ = client(*[httpx.ConnectError("no network")] * MAX_ATTEMPTS)
         ledger = Ledger()
         packet = build_packet(RUN, window_around(context().events, 1), 1)
 
