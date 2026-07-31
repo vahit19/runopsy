@@ -14,8 +14,27 @@ import { useMemo } from "react";
 import type { Candidate, GraphResponse } from "./api";
 import { useSelection } from "./store";
 
-const COLUMN = 260;
-const ROW = 74;
+// Nodes are 210 wide; the gap between columns has to hold a "may reach 42%" label
+// without it colliding with the box beside it.
+const COLUMN = 300;
+const ROW = 82;
+const MAX_LABEL = 30;
+
+/** One line that fits the box.
+ *
+ * A run's label is its task, and a task is often a repository path. Left whole it
+ * overflowed the node, wrapped across three lines and covered the two steps below it —
+ * so the first thing anyone saw in the web view was a filesystem path obscuring the
+ * trace. The terminal graph has truncated for exactly this reason since it was written;
+ * this view simply never got the same treatment.
+ */
+function fitLabel(text: string): string {
+  const flat = text.replace(/\s+/gu, " ").trim();
+  if (flat.length <= MAX_LABEL) return flat;
+  // Keep the end of a path rather than the start: `...\hermes-live\fail` identifies the
+  // run, `C:\Users\someone\AppData\...` identifies everybody's machine.
+  return "..." + flat.slice(-(MAX_LABEL - 3));
+}
 
 type Props = {
   graph: GraphResponse;
@@ -59,11 +78,17 @@ export function FailureMap({ graph, onset, observedFailureNodeId }: Props) {
               x: (index % 4) * COLUMN,
               y: Math.floor(index / 4) * ROW,
             },
-            data: { label: `${node.sequence}  ${node.label || node.kind}` },
+            data: { label: `${node.sequence}  ${fitLabel(node.label || node.kind)}` },
+            title: node.label || node.kind,
             style: {
               ...STYLES[role],
               borderRadius: 6,
               padding: "6px 10px",
+              // Belt and braces with fitLabel: a node must never grow to fit its text
+              // and cover the steps around it, whatever a future runtime puts here.
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
               fontSize: 12,
               width: 210,
               outline: node.node_id === focused ? "3px solid #4a6cf7" : undefined,
