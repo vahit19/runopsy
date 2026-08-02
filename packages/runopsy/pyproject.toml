@@ -1,6 +1,6 @@
 [project]
 name = "runopsy"
-version = "0.1.2"
+version = "0.1.3"
 description = "Find where an AI agent run started going wrong, not just where it stopped"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -26,15 +26,15 @@ classifiers = [
 # server carries the web view. Anything that needs a network or a heavy optional
 # dependency stays behind an extra.
 dependencies = [
-    "runopsy-cli==0.1.2",
-    "runopsy-server==0.1.2",
+    "runopsy-cli==0.1.3",
+    "runopsy-server==0.1.3",
 ]
 
 [project.optional-dependencies]
 # Reading Inspect AI eval logs. Separate because inspect-ai is a large dependency
 # that most users of the CLI will never touch.
-inspect = ["runopsy-inspect==0.1.2"]
-all = ["runopsy-inspect==0.1.2"]
+inspect = ["runopsy-inspect==0.1.3"]
+all = ["runopsy-inspect==0.1.3"]
 
 [project.urls]
 Homepage = "https://github.com/vahit19/runopsy"

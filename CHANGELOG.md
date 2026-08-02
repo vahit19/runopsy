@@ -5,6 +5,37 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-08-02
+
+Found by installing the published wheel and using it the way a stranger would.
+
+**Fixed — a clean run no longer reads as a tool that does nothing.** Most runs succeed,
+so the output most users see most often was "Nothing detectable went wrong" and then
+silence. Correct, and useless: somebody records their ordinary green pipeline, is told
+there is nothing to report, and concludes the tool does nothing. A clean verdict now says
+what it examined — how many tool and model calls, against how many detectors — and what
+the run left in the working tree.
+
+**Fixed — the README told readers the thing was not published.** Its first command
+installs from PyPI; the paragraph beneath it said the CLI had not landed and to clone the
+repository instead. True for a day, false since. `runopsy verify` was also missing from
+the command table.
+
+**Fixed — the Hermes plugin found nothing and said nothing.** It resolved the `runopsy`
+executable through PATH, and Runopsy and Hermes live in separate virtualenvs, so it never
+found one — producing traces with tool calls and no model calls at all. The installer
+records the path now. Verified on live sessions: 30 `llm_call` events with real token
+counts where there had been none.
+
+**Fixed — the recording lock gave up after ten seconds.** Windows' blocking mode raises
+at about that point with no way to wait longer, so a busy moment became an exception on
+the recording path — a step of history never written down.
+
+**Changed** — the README's images are regenerated from a real 61-step Hermes session
+rather than a constructed trace, and `render_ui.mjs` moved into `packages/runopsy-ui/`,
+where its dependency actually is; the documented command could never have run from the
+repository root.
+
 ## [0.1.2] — 2026-08-02
 
 **Added — checkpoints, so a replay is about the original run.** `runopsy replay` has

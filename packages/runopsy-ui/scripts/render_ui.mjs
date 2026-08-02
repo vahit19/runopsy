@@ -7,7 +7,11 @@
  * exactly the artefact that must not be a mock when the argument is that confident
  * statements can be checked.
  *
- *   node scripts/render_ui.mjs http://127.0.0.1:8971
+ *   cd packages/runopsy-ui && npm run screenshots -- http://127.0.0.1:8971
+ *
+ * It lives here rather than in the repository's scripts/ directory because ESM resolves
+ * imports from the file's own location: playwright is a dependency of this package, and
+ * a copy at the root resolved nothing.
  *
  * WebGL needs software rendering in headless Chromium, hence the ANGLE flags — without
  * them the 3D canvas comes out blank and the screenshot silently shows nothing.
@@ -19,7 +23,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT = resolve(HERE, "..", "docs", "images");
+const OUT = resolve(HERE, "..", "..", "..", "docs", "images");
 const BASE = process.argv[2] ?? "http://127.0.0.1:8971";
 const VIEWPORT = { width: 1280, height: 780 };
 
