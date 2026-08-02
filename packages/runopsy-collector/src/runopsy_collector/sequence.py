@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import sys
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import IO
@@ -30,17 +31,32 @@ COUNTER_NAME = ".sequence"
 LOCK_NAME = ".sequence.lock"
 
 
+LOCK_TIMEOUT_SECONDS = 60.0
+"""How long to keep trying for the lock before giving up on it.
+
+Generous on purpose. Everything this lock protects is short — reserve a number, append a
+line, fold a digest — so a wait of any length means contention, not work, and contention
+resolves. What it must not do is give up early: the caller is a recorder, and a lock it
+failed to take is a step of the user's history that was never written down.
+
+Windows' own blocking mode raises after about ten seconds, which is long enough for
+ordinary use and not for a machine under load. That was measured here: the full test
+suite running alongside eight concurrent writers was enough to exceed it.
+"""
+
+
 @contextlib.contextmanager
 def exclusive(path: Path) -> Iterator[None]:
     """Hold an exclusive cross-process lock for the duration of the block.
 
-    Both implementations block until the lock is free and both are released by the
-    kernel when the file closes, including on an abrupt exit.
+    Released by the kernel when the file closes, including on an abrupt exit, which is
+    why this is an operating-system lock rather than a lock file of our own: a process
+    that dies holding one must not wedge every later hook.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     handle: IO[bytes] = path.open("ab+")
     try:
-        _lock(handle)
+        _lock_with_patience(handle)
         try:
             yield
         finally:
@@ -49,16 +65,34 @@ def exclusive(path: Path) -> Iterator[None]:
         handle.close()
 
 
+def _lock_with_patience(handle: IO[bytes], timeout: float = LOCK_TIMEOUT_SECONDS) -> None:
+    """Keep asking for the lock until the deadline, then let the failure through."""
+    deadline = time.monotonic() + timeout
+    delay = 0.01
+    while True:
+        try:
+            _lock(handle)
+            return
+        except OSError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(delay)
+            # Backed off so a crowd of writers does not resynchronise into a herd, and
+            # capped so the last attempt still lands inside the deadline.
+            delay = min(delay * 2, 0.25)
+
+
 if sys.platform == "win32":  # pragma: no cover - exercised on Windows only
 
     def _lock(handle: IO[bytes]) -> None:
         import msvcrt
 
         handle.seek(0)
-        # LK_LOCK retries about ten times over ten seconds before raising, which is the
-        # right shape here: contention is measured in milliseconds, so a wait this long
-        # means something is genuinely wrong rather than merely busy.
-        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        # LK_NBLCK: fail immediately and let `_lock_with_patience` decide how long to
+        # keep trying. LK_LOCK looks like the obvious choice and is not — it blocks for
+        # about ten seconds and then raises, which turns a busy moment into a lost event
+        # with no way to extend the wait.
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
 
     def _unlock(handle: IO[bytes]) -> None:
         import msvcrt

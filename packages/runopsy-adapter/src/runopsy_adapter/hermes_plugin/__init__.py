@@ -29,16 +29,37 @@ from typing import Any
 
 HOOK_TIMEOUT_SECONDS = 10.0
 
+EXECUTABLE_FILE = "runopsy-path.txt"
+"""Written by the installer, which knows where Runopsy lives. See _runopsy_executable."""
+
 
 def _runopsy_executable() -> str | None:
     """Where the runopsy CLI lives, or None when it cannot be found.
 
-    ``RUNOPSY_EXECUTABLE`` wins so a virtualenv install that is not on PATH still
-    works; otherwise PATH decides, exactly as it does for the shell hooks.
+    ``RUNOPSY_EXECUTABLE`` wins so an operator can redirect it. Otherwise the path
+    recorded at install time is used, and PATH is the last resort.
+
+    The recorded path is not an optimisation. Runopsy and Hermes are normally installed
+    in *separate* virtualenvs — this project's own instructions say to — so ``runopsy``
+    is not on the PATH that Hermes runs with, and PATH-only resolution meant the plugin
+    found nothing and silently recorded nothing. The symptom was a trace full of tool
+    calls with no model calls at all, which looks exactly like a runtime that does not
+    report them. The shell hooks never had this problem because their config carries an
+    absolute path; now the plugin carries one too, written by the installer that already
+    knew it.
     """
     override = os.environ.get("RUNOPSY_EXECUTABLE")
     if override and Path(override).is_file():
         return override
+
+    recorded = Path(__file__).with_name(EXECUTABLE_FILE)
+    try:
+        stored = recorded.read_text(encoding="utf-8").strip()
+    except OSError:
+        stored = ""
+    if stored and Path(stored).is_file():
+        return stored
+
     return shutil.which("runopsy")
 
 

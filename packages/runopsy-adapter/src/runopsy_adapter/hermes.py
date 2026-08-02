@@ -24,11 +24,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from runopsy_adapter.hermes_plugin import EXECUTABLE_FILE as PLUGIN_EXECUTABLE_FILE
 from runopsy_adapter.recorder import PayloadStore
 from runopsy_adapter.secrets import scan
 from runopsy_core.hashing import hash_text
@@ -365,7 +368,27 @@ def install_plugin(target: Path | None = None) -> Path:
         destination.joinpath(name).write_text(
             plugin_source_dir().joinpath(name).read_text(encoding="utf-8"), encoding="utf-8"
         )
+
+    # Where this Runopsy lives, recorded now because the plugin cannot work it out
+    # later. Hermes runs in its own virtualenv — these instructions say to install it
+    # that way — so  is not on the PATH the plugin inherits, and resolving by
+    # PATH alone meant it found nothing and recorded nothing. A trace with tool calls and
+    # no model calls is indistinguishable from a runtime that does not report them, which
+    # is exactly the confusion this project already spent a day on.
+    executable = _this_runopsy()
+    if executable is not None:
+        destination.joinpath(PLUGIN_EXECUTABLE_FILE).write_text(executable, encoding="utf-8")
     return destination
+
+
+def _this_runopsy() -> str | None:
+    """The absolute path of the running Runopsy CLI, if it can be identified."""
+    scripts = Path(sys.executable).parent
+    for name in ("runopsy.exe", "runopsy"):
+        candidate = scripts / name
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which("runopsy")
 
 
 def adapter_status(config_path: Path | None = None) -> AdapterStatus:
