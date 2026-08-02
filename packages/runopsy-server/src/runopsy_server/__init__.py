@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 __all__ = ["__version__", "create_app", "default_store"]
 

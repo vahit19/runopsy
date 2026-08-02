@@ -302,7 +302,7 @@ runopsy ui                                               # loopback only
 runopsy verify [RUN|latest] [--all]                       # was this trace edited after recording?
 runopsy prune [--apply]                                  # never expires anything on its own
 runopsy label  [RUN|latest] --onset N --by NAME [--healthy] [--category C]
-runopsy bench [--compare] [--corpus DIR] [--inject] [--perf] [--write PATH]
+runopsy bench [--compare] [--corpus DIR] [--inject [--store DIR]] [--perf] [--write PATH]
 runopsy setup                                            # key to the OS keyring
 runopsy doctor
 runopsy config [--init]
@@ -312,7 +312,7 @@ runopsy hook                                             # called by Hermes, not
 
 `runopsy run` drives the runtime through its own documented command line — no Hermes module is imported, nothing is patched, and the store is passed through `RUNOPSY_HOME` rather than by rewriting the user config. It checks afterwards whether anything was actually recorded, because "the agent finished and the trace is empty" is a real state that otherwise looks like success.
 
-Conventions worth preserving when adding commands: every command that reads or writes recorded runs takes `--store` (`setup`, `bench` and `config` do not, and should not — they touch the keyring, the synthetic corpus and `runopsy.toml` respectively); `latest` resolves to the most recently started run; findings never fail the command unless CI opts in; anything that could leak is redacted by default.
+Conventions worth preserving when adding commands: every command that reads or writes recorded runs takes `--store` (`setup` and `config` do not, and should not — they touch the keyring and `runopsy.toml`. `bench` takes one because `--inject --store` breaks a *recorded* run rather than a generated one, which is the nearest thing to a labelled real corpus that needs no human judgement); `latest` resolves to the most recently started run; findings never fail the command unless CI opts in; anything that could leak is redacted by default.
 
 Anything the output tells a user to run must actually run. `tests/test_real_run.py` executes the replay command that `diagnose` prints, because for two months it printed a `--dry-run` flag that does not exist — asserting on the text of a hint is not the same as checking the hint works.
 

@@ -73,7 +73,18 @@ Measured on 20 labelled traces with declared ground truth, reproducible offline 
 Zero false positives on healthy runs — a spurious finding is what gets a diagnosis tool
 switched off, so that threshold is exact rather than approximate.
 
-**What this does not show.** These are synthetic single-fault traces. They establish that
+**Measured on a real recorded run, with ground truth nobody had to judge.**
+`runopsy bench --inject --store DIR` takes a session that was actually recorded, breaks
+it at a known step, and scores the engine on finding that step. The onset is a fact of
+construction rather than an opinion about the trace, so it needs no expert labeller —
+and the trace itself is real: real commands, real timings, real repository state. On a
+twenty-event Hermes session, 25 injected cases: **100% onset localization** across
+retry storms, timeouts, tool failures and stale memory, and 100% on noticing a gap when
+events are dropped. Two fault kinds are excluded and named in the output — a truncated
+plan and a silently wrong value leave nothing anomalous in the trace, so no deterministic
+detector can reach them.
+
+**What this does not show.** The labelled suite below is synthetic single-fault traces. They establish that
 the ranking behaves as designed; they do not establish that it saves anyone time on real
 work. That needs fault injection on real workloads and a measured reduction in
 time-to-diagnosis. The full report, including the cases the engine still misses and the

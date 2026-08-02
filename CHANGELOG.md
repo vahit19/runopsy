@@ -5,6 +5,29 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.5] — 2026-08-02
+
+**Added — fault injection into runs that were actually recorded.** `runopsy bench
+--inject --store DIR` picks a recorded session the engine finds nothing wrong with,
+breaks it at a known step, and scores the engine on finding that step. This is the
+measurement the project has been missing, and it needs no expert: the onset is a fact of
+construction rather than a judgement about the trace, while the trace itself is real —
+real commands, real timings, real repository state. On a twenty-event Hermes session, 25
+cases, 100%% onset localization across retry storms, timeouts, tool failures and stale
+memory.
+
+It is not a substitute for a human-labelled corpus. A person reading a genuine failure
+and saying where it began is still the measurement that decides whether this is useful,
+and that corpus is still empty.
+
+**Fixed — the injection table hid what the engine cannot do.** Fault kinds that produced
+no scoreable case had no row at all, so they vanished and the table read as a clean sweep.
+The two that disappeared were the hardest — a plan cut off mid-sentence and a value that
+is simply wrong. Both are now named in the output as the boundary of the table rather
+than omitted from it.
+
+**Changed** — `runopsy bench` takes `--store`, which it deliberately did not before.
+
 ## [0.1.4] — 2026-08-02
 
 The release where the engine is measured against somebody else's labels.

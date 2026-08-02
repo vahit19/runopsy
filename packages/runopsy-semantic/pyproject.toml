@@ -1,6 +1,6 @@
 [project]
 name = "runopsy-semantic"
-version = "0.1.4"
+version = "0.1.5"
 description = "Optional, budget-bounded semantic analysis for Runopsy diagnoses"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,8 +21,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core==0.1.4",
-    "runopsy-adapter==0.1.4",
+    "runopsy-core==0.1.5",
+    "runopsy-adapter==0.1.5",
     "httpx>=0.27",
     "keyring>=25.0",
 ]

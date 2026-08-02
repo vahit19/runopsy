@@ -1,6 +1,6 @@
 [project]
 name = "runopsy-adapter"
-version = "0.1.4"
+version = "0.1.5"
 description = "Runtime adapter toolkit for Runopsy: recorder, secret scanner and contract"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,7 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core==0.1.4",
+    "runopsy-core==0.1.5",
     # Reading Hermes' own config to report whether it is wired to us.
     "pyyaml>=6.0",
 ]
