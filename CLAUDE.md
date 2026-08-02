@@ -47,13 +47,36 @@ A third change was tried and **reverted after measuring it.** A loop is attribut
 
 **Recording under parallelism was broken and is the one defect nobody would have reported.** Every test and every live session so far recorded one step at a time. An agent that delegates to parallel subagents does not: it fires a `runopsy hook` process per event, several within the same millisecond. Thirty-two concurrent hooks against one store lost twelve events, silently — a hook's first duty is not to break the run it observes, so it swallowed the error and exited zero, and the run looked recorded. Three separate faults, each invisible while the others were present: dedup queried the index *before* the journal append, so a locked database discarded the event before anything durable existed; opening the collector connects to the index, so contention failed the write path outright; and step numbers came from `SELECT MAX(sequence) + 1`, which two subagents in one session — what Hermes subagents actually are — took simultaneously, producing one event id for two steps and deduplicating the second away. Thirty-two of thirty-two now, pinned by `tests/test_concurrency.py`, which launches real subprocesses because none of this is visible in-process.
 
-**Which detectors real data has actually exercised**, measured on 31 July 2026 across every live session recorded. Of fifteen, **three** have ever produced a finding on a real trace: `structural:tool_execution`, `behavioral:tool_loop`, `structural:incomplete_run`. That is the honest shape of the evidence behind this engine, and it should be read before anyone quotes the benchmark as though it covered everything.
+**Which detectors real data has actually exercised**, re-measured on 2 August 2026 after
+four more live Hermes sessions and the repository capture that came with them. **Seven of
+fifteen** have now produced a finding on a real trace, up from three: `structural:
+tool_execution`, `behavioral:tool_loop`, `structural:incomplete_run`,
+`structural:outcome_mismatch`, `behavioral:budget`, `behavioral:state_flapping` and
+`structural:timeout`. Two of those are new because the trace now carries the working tree
+— `state_flapping` fires on `git.head` returning to a commit the run had already left,
+which is an agent undoing its own work and was invisible before. `budget` needed real
+token counts, which needed the Hermes plugin to actually be found (see below).
 
-The twelve that have not fired split three ways, and the difference matters:
+The eight that have not fired split three ways, and the difference is the point:
 
-- **Correct silence.** `behavioral:incomplete_handoff` saw real data for the first time — a session that spawned two subagents via `delegate_task`, producing two genuine `handoff` events — and stayed silent because both arrived with summaries. `behavioral:budget` is off unless a ceiling is configured; against the real 56-event session that spent 32,141 tokens it is silent by default, fires at a 20,000 ceiling, and is silent again at 100,000. Both verified, both pinned in `tests/test_real_run.py`.
-- **Conditions that did not occur.** `structural:timeout`, `structural:model_call`, `structural:blocked_action`, `behavioral:retry_storm`, `structural:outcome_mismatch`, `structural:trace_integrity`, `structural:missing_run_start` need failures these runs did not have. Nothing to fix; nothing proven either.
-- **Event kinds Hermes never emits.** `behavioral:stale_memory` and `behavioral:unsupported_claim` need `memory_op` and `claim` events. Real traces contain only `run_start`, `tool_call`, `llm_call`, `handoff` and `run_end`, so these two are unreachable through this runtime and are exercised solely by `examples/research_failure`. A runtime that reports memory or claims would change that.
+- **Correct silence, verified.** `behavioral:budget` is silent with no ceiling, fires at
+  5,000 against a real session that spent 21,675 tokens, and is silent again at 100,000.
+  `behavioral:incomplete_handoff` stayed silent on a session that spawned two subagents
+  because both handed over summaries.
+- **Structurally unreachable, and worth saying so.** `behavioral:retry_storm` keys on
+  `retry_of`, and **no adapter sets it while recording** — only the replay executor and
+  the synthetic bench cases do. It cannot fire on any recorded run, real or otherwise,
+  until an adapter learns to recognise a retry. `behavioral:stale_memory` and
+  `behavioral:unsupported_claim` need `memory_op` and `claim` events, which Hermes never
+  emits. Three detectors are therefore exercised only by constructed traces, and that is a
+  fact about the engine's evidence, not a footnote.
+- **Conditions that have not occurred.** `structural:model_call`,
+  `structural:blocked_action`, `structural:missing_run_start` and
+  `structural:trace_integrity` need failures these runs did not have. Two of them are
+  now *harder* to reach on purpose: the sequence allocator prevents the duplicate and
+  missing step numbers `trace_integrity` reports, so seeing it fire would mean something
+  is wrong that this design is supposed to make impossible.
+
 
 **Six real runs exist now**, and the engine behaves correctly on all of them: two clean successes produce **zero** findings, the 33-event success reports its three recovered patch failures and labels them recovered, the 42-event stuck run names the loop as its primary candidate, and two one-event runs killed by a provider error are reported as possibly interrupted at 13% confidence. The zero-false-positive invariant now has real traces behind it, not only synthetic ones.
 
