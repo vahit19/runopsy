@@ -12,7 +12,7 @@ from runopsy_adapter.recorder import EventSink, ListSink, PayloadStore, RunRecor
 from runopsy_adapter.secrets import ScanResult, contains_secret, scan
 from runopsy_adapter.shell import ADAPTER_NAME, StepOutcome, record_steps
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 __all__ = [
     "ADAPTER_NAME",

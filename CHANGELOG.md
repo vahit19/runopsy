@@ -5,6 +5,8 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-08-02
+
 **Added — checkpoints, so a replay is about the original run.** `runopsy replay` has
 always looked for a point to return to and never found one, because nothing recorded the
 working tree; every plan carried "file state cannot be restored" and every execution

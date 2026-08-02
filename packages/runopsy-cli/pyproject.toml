@@ -1,6 +1,6 @@
 [project]
 name = "runopsy-cli"
-version = "0.1.1"
+version = "0.1.2"
 description = "The Runopsy command line: diagnose agent runs and inspect the evidence"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,12 +21,12 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core==0.1.1",
-    "runopsy-collector==0.1.1",
-    "runopsy-bench==0.1.1",
-    "runopsy-replay==0.1.1",
-    "runopsy-adapter==0.1.1",
-    "runopsy-semantic==0.1.1",
+    "runopsy-core==0.1.2",
+    "runopsy-collector==0.1.2",
+    "runopsy-bench==0.1.2",
+    "runopsy-replay==0.1.2",
+    "runopsy-adapter==0.1.2",
+    "runopsy-semantic==0.1.2",
     "typer>=0.12",
     "rich>=13.7",
     # Transitive through typer, pinned here because 8.3.2 and below carry

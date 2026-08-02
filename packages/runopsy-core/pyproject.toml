@@ -1,6 +1,6 @@
 [project]
 name = "runopsy-core"
-version = "0.1.1"
+version = "0.1.2"
 description = "Framework-agnostic trace schema, graph, detectors and causal ranking for Runopsy"
 readme = "README.md"
 requires-python = ">=3.12"
