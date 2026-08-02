@@ -12,9 +12,9 @@
 uv tool install runopsy && runopsy demo
 ```
 
-> **0.1.0 is mid-publish.** `runopsy-core` and `runopsy-collector` are on PyPI and
-> usable as a library today; the CLI distributions land as the remaining trusted
-> publishers are registered. Until then, clone and `uv sync`.
+That installs everything and runs a worked example: no agent, no API key, no
+configuration. If you would rather not install a tool globally, `pip install runopsy`
+into a virtualenv does the same.
 
 When an agent fails, the last error is rarely the problem. A config written wrongly at
 step 9 surfaces as a failing test at step 14, and reading the log bottom-up sends you to
@@ -90,11 +90,19 @@ between two answers, so the rule became whether calls keep turning up results th
 *new*. Both corrections, and the regressions that pin them, are in
 `tests/test_real_run.py`.
 
-Across the six real runs recorded so far the engine now behaves: the two clean successes
-produce no findings at all, the stuck run names its loop, and the run that failed and
-recovered says so in those words. Neither correction moved the table above by a tenth of
-a point, which is the honest summary of what that table measures — the ranking, not the
-product.
+Across the real runs recorded so far the engine behaves: clean successes produce no
+findings at all, the stuck run names its loop, and the run that failed and recovered says
+so in those words. None of the corrections moved the table above by a tenth of a point,
+which is the honest summary of what that table measures — the ranking, not the product.
+
+Seven of the fifteen detectors have now produced a finding on a real recorded run, up
+from three. Two of the new ones only became reachable when the trace started carrying the
+working tree: an agent that commits and undoes its own work is invisible in a log of
+commands, and shows up immediately as a repository state returning to somewhere it had
+already been. Three detectors, though, cannot fire on a recorded run at all —
+`retry_storm` keys on a field no adapter sets while recording, and two others need event
+kinds this runtime never emits — so they are exercised solely by traces we wrote
+ourselves. That is stated here rather than left to be discovered.
 
 ## What you get
 
@@ -233,6 +241,7 @@ reported as reproduction, never as causation.
 | `runopsy adapter hermes status` | check the runtime is really wired and recording |
 | `runopsy adapter hermes plugin` | install the plugin that records model calls and tokens |
 | `runopsy-inspect import LOG` | read an Inspect AI eval log into a trace |
+| `runopsy verify [RUN\|--all]` | check a trace has not been altered since it was recorded |
 | `runopsy prune` | delete traces past the retention window |
 | `runopsy ui` | the React timeline and failure map (optional 3D), loopback only |
 | `runopsy label --onset N` | record where a run actually went wrong, as a case |
@@ -334,8 +343,26 @@ diagnosis of a trace we misunderstood.
 Measured at scale with `runopsy bench --perf`: 100,000 events ingest in about three
 seconds and every stage stays roughly linear.
 
-Not built yet: the opt-in real-run corpus (section 17.1 layer four), and publication to
-PyPI — see [RELEASING.md](RELEASING.md) for what publishing still needs.
+Published: all ten distributions are on PyPI, and `pip install runopsy` is verified from
+a clean virtualenv on each release.
+
+What each step did to the repository is recorded too — the commit, the branch, and the
+files it changed with their line counts — which is what makes a replay an experiment
+about the original run rather than about whatever is on disk today: `replay --execute`
+restores the tree from a checkpoint before re-running anything.
+
+Journals are sealed as they are written, so `runopsy verify` can tell you a trace is
+byte-for-byte the one that was recorded. That is tamper evidence, not tamper proofing:
+whoever can edit a journal can delete the seal beside it, and a signature that survived
+that needs a key this machine has nowhere safe to keep.
+
+**Not built yet: the labelled real-run corpus.** The mechanism is here — `runopsy label`
+turns a run into a case, `runopsy bench --corpus DIR` scores against it — and the corpus
+itself is empty, because filling it means a human reading real traces and saying where
+each one actually went wrong. Every headline number below therefore still comes from
+constructed traces. Seven of the fifteen detectors have produced a finding on a real
+recorded run; three of the rest cannot fire on one at all, and
+[CLAUDE.md](CLAUDE.md) says which and why.
 
 ## The web view
 
