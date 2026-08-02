@@ -7,7 +7,7 @@ changes stored traces, so additions are cheap but changes require a schema versi
 from enum import StrEnum
 from typing import Final
 
-SCHEMA_VERSION: Final = "0.1"
+SCHEMA_VERSION: Final = "0.2"
 """Version of the normalized event and graph format.
 
 Bumped whenever a field is removed or its meaning changes. Adding an optional field

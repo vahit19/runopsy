@@ -204,6 +204,14 @@ class CheckpointPayload(_Payload):
     checkpoint_id: Identifier
     repo_state: str | None = None
     turn_order: int | None = Field(default=None, ge=0)
+    patch_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    """Vault digest of the uncommitted changes at this point.
+
+    A commit sha says where the run was; this says what the agent had done on top of it.
+    Without it a checkpoint can only be *named*, and  was left warning
+    that file state could not be restored — which is most of what there is to restore for
+    a coding agent.
+    """
 
 
 class HandoffPayload(_Payload):

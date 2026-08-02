@@ -176,6 +176,28 @@ def _read_edits(cwd: Path | None) -> dict[str, tuple[int, int]]:
     return edits
 
 
+def capture_patch(cwd: Path | None = None) -> str | None:
+    """The working tree's uncommitted changes as a patch, or ``None`` if there are none.
+
+    This is what makes a checkpoint restorable rather than merely labelled. A commit sha
+    says where the run was; the patch says what the agent had done on top of it, which
+    for a coding agent is most of what there is to restore.
+
+    Taken as a patch rather than by writing into the user's repository. ``git stash
+    create`` would be shorter and would leave objects in a repository Runopsy was asked
+    to watch, not to write to — the same rule that made the store exclude itself from the
+    agent's commits. A patch goes into Runopsy's own vault, is scanned for secrets like
+    every other payload, and can be thrown away without touching anything of theirs.
+
+    Binary changes are deliberately included (``--binary``): a checkpoint that silently
+    dropped them would restore a tree that looks right and is not.
+    """
+    completed = _git("diff", "--binary", "HEAD", cwd=cwd)
+    if completed is None or completed.returncode != 0:
+        return None
+    return completed.stdout or None
+
+
 def _parse_status(output: str) -> RepositoryState:
     """Read ``--porcelain=v2 --branch`` into a state.
 

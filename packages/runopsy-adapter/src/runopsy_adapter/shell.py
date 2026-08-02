@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from runopsy_adapter.recorder import EventSink, PayloadStore, RunRecorder
-from runopsy_adapter.repo import Observation, RepositoryWatch
+from runopsy_adapter.repo import Observation, RepositoryWatch, capture_patch
 from runopsy_core.schema import CallStatus, RunOutcome
 
 ADAPTER_NAME = "shell"
@@ -74,7 +74,12 @@ def _look(watch: RepositoryWatch | None, cwd: Path) -> Observation | None:
         return None
 
 
-def _observe_repository(recorder: RunRecorder, watch: RepositoryWatch | None, cwd: Path) -> None:
+def _observe_repository(
+    recorder: RunRecorder,
+    watch: RepositoryWatch | None,
+    cwd: Path,
+    vault: PayloadStore | None,
+) -> None:
     """Record the repository as it stood before the first command ran.
 
     Without this baseline the first step's changes have nothing to be changes *from*,
@@ -83,6 +88,41 @@ def _observe_repository(recorder: RunRecorder, watch: RepositoryWatch | None, cw
     observed = _look(watch, cwd)
     if observed is not None:
         recorder.state_snapshot(observed.state.values())
+        _record_checkpoint(recorder, observed, cwd, vault)
+
+
+def _record_checkpoint(
+    recorder: RunRecorder,
+    observed: Observation,
+    cwd: Path,
+    vault: PayloadStore | None,
+) -> None:
+    """A point this run can be returned to, wherever the tree moved.
+
+    ``runopsy replay`` has always looked for these and never found one, so every plan it
+    produced carried the warning that file state could not be restored. Nothing was
+    taking them: a checkpoint needs the working tree, and the trace held only commands.
+
+    The commit and the uncommitted changes together reconstruct the tree exactly. The
+    patch goes to Runopsy's vault — secret-scanned like every other payload, and
+    deletable — rather than into the user's repository, for the same reason the store
+    excludes itself from their commits.
+    """
+    if observed.state.head is None or vault is None:
+        # No commit to anchor against, or nowhere to keep the changes. Either way a
+        # checkpoint could be named but not restored, which is the situation this exists
+        # to end rather than to reproduce more quietly.
+        return
+    try:
+        patch = capture_patch(cwd)
+        digest = vault.put(patch) if patch else None
+    except Exception:
+        return
+    recorder.checkpoint(
+        f"{recorder.run_id}_ck_{recorder.sequence:04d}",
+        repo_state=observed.state.head,
+        patch_digest=digest,
+    )
 
 
 def record_steps(
@@ -117,7 +157,7 @@ def record_steps(
             runtime=ADAPTER_NAME,
             repo=Path(working_directory).name,
         )
-        _observe_repository(recorder, watch, working_directory)
+        _observe_repository(recorder, watch, working_directory, vault)
 
         for command in commands:
             started = time.perf_counter()
@@ -164,6 +204,7 @@ def record_steps(
             )
             if observed is not None and observed.worth_a_snapshot:
                 recorder.state_snapshot(observed.state.values())
+                _record_checkpoint(recorder, observed, working_directory, vault)
 
             outcome = StepOutcome(
                 command=command,

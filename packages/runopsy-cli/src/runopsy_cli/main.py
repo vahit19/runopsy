@@ -27,6 +27,8 @@ from runopsy_core import AnalysisContext, apply_replay_evidence, to_otlp_json
 from runopsy_core import diagnose as run_diagnosis
 from runopsy_core.detectors import default_registry
 from runopsy_core.schema import (
+    CheckpointEvent,
+    CheckpointPayload,
     Event,
     RunStartEvent,
     StatePayload,
@@ -348,7 +350,60 @@ def _with_repository_state(
                 state=StatePayload(values=observed.state.values()),
             )
         )
+        checkpoint = _checkpoint_at(
+            collector, run=run, cwd=cwd, head=observed.state.head, after=recorded[-1]
+        )
+        if checkpoint is not None:
+            recorded.append(checkpoint)
     return recorded
+
+
+def _checkpoint_at(
+    collector: Collector,
+    *,
+    run: str,
+    cwd: str | None,
+    head: str | None,
+    after: Event,
+) -> Event | None:
+    """A point this run can be returned to, recorded wherever the tree moved.
+
+    ``runopsy replay`` has always looked for these and never found one, so every plan
+    carried the warning that file state could not be restored. The reason is that nothing
+    took them: a checkpoint needs the working tree, and the trace only had commands.
+
+    What is stored is the commit plus a patch of the uncommitted changes, which together
+    reconstruct the tree exactly. The patch goes to the vault — content-addressed,
+    secret-scanned, and deletable — rather than into the user's repository, for the same
+    reason the store excludes itself from their commits: Runopsy was asked to watch this
+    repository, not to write to it.
+
+    Returns ``None`` whenever anything is unavailable. A run without checkpoints is the
+    behaviour of every version until now, so failing here costs nothing that was
+    previously guaranteed.
+    """
+    if head is None:
+        return None  # a repository with no commit has nothing to anchor a patch against
+    try:
+        from runopsy_adapter.repo import capture_patch
+
+        patch = capture_patch(Path(cwd) if cwd else None)
+        digest = collector.vault.put(patch) if patch else None
+    except Exception:
+        return None
+
+    sequence = collector.next_sequence(run)
+    return CheckpointEvent(
+        event_id=f"{run}_evt_{sequence:04d}",
+        run_id=run,
+        sequence=sequence,
+        timestamp=after.timestamp,
+        checkpoint=CheckpointPayload(
+            checkpoint_id=f"{run}_ck_{sequence:04d}",
+            repo_state=head,
+            patch_digest=digest,
+        ),
+    )
 
 
 def _record_to_journal_only(payload: dict[str, object], run: str, store: Path | None) -> None:

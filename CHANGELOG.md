@@ -5,6 +5,29 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+**Added — checkpoints, so a replay is about the original run.** `runopsy replay` has
+always looked for a point to return to and never found one, because nothing recorded the
+working tree; every plan carried "file state cannot be restored" and every execution
+started from whatever was on disk *now* — after the failure, after any manual fixing,
+possibly weeks later. Runs in a repository now record the commit and a patch of the
+uncommitted changes wherever the tree moves, and executing a plan restores that tree in
+the sandbox first. R2 session fork works end to end: breaking a file, noticing two steps
+later, skipping the breaking step, and watching the failure disappear.
+
+The patch goes to Runopsy's own vault, secret-scanned like every other payload, rather
+than into the user's repository — the same rule that made the store exclude itself from
+the agent's commits. `.git` is kept in the sandbox copy only when a checkpoint needs it,
+so replays without one stay as cheap as they were. The verdict states what it restored,
+because that decides what the result is evidence *about*.
+
+**Changed** — `CheckpointPayload` gained `patch_digest`, so the trace schema moves to
+0.2. Stores written by an older build keep saying so and are read normally; a store
+written by a newer one is refused rather than degraded.
+
+**Fixed** — a sandbox copy no longer aborts on one unreadable file. `copytree` raises on
+the first error, so a database or log held open by another process ended the experiment
+with a WinError stack trace instead of a result.
+
 **Fixed** — every package pins its siblings, not only the meta-distribution. Publishing
 0.1.1 while PyPI's index was catching up resolved a 0.1.1 CLI onto a 0.1.0 collector: the
 release installed without the fix it was released for, and nothing said anything. These

@@ -285,8 +285,20 @@ class RunRecorder:
             )
         )
 
-    def checkpoint(self, checkpoint_id: str, *, repo_state: str | None = None) -> str:
-        """Record a point the run could be returned to."""
+    def checkpoint(
+        self,
+        checkpoint_id: str,
+        *,
+        repo_state: str | None = None,
+        patch_digest: str | None = None,
+    ) -> str:
+        """Record a point the run could be returned to.
+
+        repo_state is the commit and patch_digest the vault entry holding what
+        was uncommitted on top of it. Both are needed: a commit alone says where the run
+        was, not what the agent had already done, and for a coding agent that is most of
+        what a replay needs to put back.
+        """
         sequence, event_id, moment = self._next()
         return self._emit(
             CheckpointEvent(
@@ -295,7 +307,11 @@ class RunRecorder:
                 agent_id=self.agent_id,
                 sequence=sequence,
                 timestamp=moment,
-                checkpoint=CheckpointPayload(checkpoint_id=checkpoint_id, repo_state=repo_state),
+                checkpoint=CheckpointPayload(
+                    checkpoint_id=checkpoint_id,
+                    repo_state=repo_state,
+                    patch_digest=patch_digest,
+                ),
             )
         )
 

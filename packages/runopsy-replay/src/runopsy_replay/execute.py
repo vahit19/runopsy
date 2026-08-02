@@ -22,6 +22,7 @@ reported: executing a command with ``[REDACTED]`` spliced into it would test not
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 import subprocess
 import tempfile
@@ -32,7 +33,7 @@ from typing import Protocol
 
 from runopsy_adapter.recorder import EventSink, RunRecorder
 from runopsy_core.detectors.base import AnalysisContext
-from runopsy_core.schema import CallStatus, RunOutcome, ToolCallEvent
+from runopsy_core.schema import CallStatus, CheckpointEvent, RunOutcome, ToolCallEvent
 from runopsy_core.validate import ReplayEvidence
 from runopsy_replay.plan import ReplayPlan, StepAction
 
@@ -95,6 +96,14 @@ class ReplayVerdict:
     original_downstream_failures: tuple[int, ...] = ()
     replayed_downstream_failures: tuple[int, ...] = ()
     skipped: tuple[ExecutedStep, ...] = ()
+    checkpoint_restored: str = ""
+    """What happened to the working tree before the experiment ran.
+
+    Carried on the verdict rather than logged, because it decides how much the result is
+    worth. A replay that started from the tree as it stood at the checkpoint is an
+    experiment about the original run; one that started from whatever is on disk today is
+    an experiment about today, and a reader has to be able to tell which they were given.
+    """
 
     @property
     def intervened(self) -> bool:
@@ -184,11 +193,131 @@ def evidence_from_stored_run(
 
 
 def _copy_sandbox(source: Path, ignores: tuple[str, ...]) -> Path:
-    """A disposable copy of the project for the experiment to run in."""
+    """A disposable copy of the project for the experiment to run in.
+
+    Files that cannot be copied are skipped rather than fatal. ``copytree`` raises on the
+    first error, which meant one file held open by another process — a database, a log,
+    an editor's swap file — aborted the whole experiment. On Windows that is not exotic:
+    a Runopsy store sitting in the project under a name the ignore list does not match is
+    enough, and the failure arrives as a stack trace about ``WinError 32`` rather than as
+    anything a person could act on.
+
+    Skipping is the right trade because of what the sandbox is for. It exists to re-run
+    commands against the project's files; a file that no process can even read is not one
+    the replay was going to depend on.
+    """
     root = Path(tempfile.mkdtemp(prefix="runopsy-replay-"))
     target = root / "work"
-    shutil.copytree(source, target, ignore=shutil.ignore_patterns(*ignores), symlinks=True)
+    shutil.copytree(
+        source,
+        target,
+        ignore=shutil.ignore_patterns(*ignores),
+        symlinks=True,
+        # Errors are collected rather than raised, and then discarded: `copytree` still
+        # copies everything it can, which is the part the experiment needs.
+        ignore_dangling_symlinks=True,
+        copy_function=_copy_if_possible,
+    )
     return target
+
+
+def _copy_if_possible(source: str, target: str) -> None:
+    """Copy one file, or leave it out. Never raises."""
+    with contextlib.suppress(OSError):
+        shutil.copy2(source, target)
+
+
+def _checkpoint_for(plan: ReplayPlan, context: AnalysisContext) -> CheckpointEvent | None:
+    """The checkpoint this plan is anchored at, if the trace recorded one."""
+    return next(
+        (
+            event
+            for event in context.events
+            if isinstance(event, CheckpointEvent) and event.sequence == plan.checkpoint_sequence
+        ),
+        None,
+    )
+
+
+def _ignores_for(configured: tuple[str, ...], anchor: CheckpointEvent | None) -> tuple[str, ...]:
+    """The sandbox exclusions, keeping ``.git`` when a checkpoint needs it.
+
+    ``.git`` is excluded by default because copying it doubles the cost of every replay
+    for something none of them used. A checkpoint changes that: restoring the tree means
+    checking out a commit, and a copy without an object store cannot. Kept only in the
+    case that needs it, so replays without checkpoints stay as cheap as they were.
+    """
+    if anchor is None or not anchor.checkpoint.repo_state:
+        return configured
+    return tuple(pattern for pattern in configured if pattern != ".git")
+
+
+def _restore_checkpoint(sandbox: Path, anchor: CheckpointEvent | None, vault: PayloadSource) -> str:
+    """Put the sandbox back to the tree the run had at the checkpoint.
+
+    This is the difference between re-running commands and re-running the *run*. Without
+    it the experiment starts from whatever the working tree looks like now — which is
+    after the failure, after any manual fixing, and possibly weeks later — so a step that
+    behaved differently would say nothing about the original.
+
+    The checkpoint carries the commit and a patch of what was uncommitted. Both are
+    applied inside the disposable copy and nowhere else: the sandbox has its own ``.git``
+    from the copytree, so checking out a commit here cannot move the user's HEAD or touch
+    their branches.
+
+    Returns a sentence describing what happened, which the verdict carries. Every failure
+    is reported rather than raised, because a replay that cannot restore the tree is still
+    worth running — it is simply worth less, and the report has to say which it was.
+    """
+    if anchor is None:
+        return "no checkpoint recorded; the sandbox starts from the current working tree"
+
+    head = anchor.checkpoint.repo_state
+    if not head:
+        return "checkpoint names no commit; the sandbox starts from the current tree"
+
+    checked_out = _run_git(sandbox, "checkout", "--force", head)
+    if not checked_out:
+        return f"could not check out {head[:8]} in the sandbox; started from the current tree"
+
+    digest = anchor.checkpoint.patch_digest
+    if digest is None:
+        return f"restored the tree at commit {head[:8]} (nothing was uncommitted)"
+
+    entry = vault.get(digest)
+    if entry is None:
+        return f"restored commit {head[:8]}, but the uncommitted changes are not in the vault"
+    if not entry.executable:
+        # Redacted content cannot be applied: what would go into the files is the
+        # placeholder, not the code, and the experiment would test something else.
+        return f"restored commit {head[:8]}; the recorded changes were redacted and withheld"
+
+    patch = sandbox / ".runopsy-checkpoint.patch"
+    patch.write_text(entry.text, encoding="utf-8")
+    applied = _run_git(sandbox, "apply", "--whitespace=nowarn", str(patch))
+    patch.unlink(missing_ok=True)
+    if not applied:
+        return f"restored commit {head[:8]}, but the recorded changes would not apply"
+    return f"restored the tree as it stood at step {anchor.sequence} (commit {head[:8]})"
+
+
+def _run_git(cwd: Path, *arguments: str) -> bool:
+    """One git command inside the sandbox. Never raises; reports whether it worked."""
+    executable = shutil.which("git")
+    if executable is None:
+        return False
+    try:
+        completed = subprocess.run(
+            [executable, *arguments],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
 
 
 def execute_plan(
@@ -227,7 +356,9 @@ def execute_plan(
         and (event.tool.status is CallStatus.ERROR or (event.tool.exit_code or 0) != 0)
     )
 
-    sandbox = _copy_sandbox(cwd or Path.cwd(), sandbox_ignores)
+    anchor = _checkpoint_for(plan, context)
+    sandbox = _copy_sandbox(cwd or Path.cwd(), _ignores_for(sandbox_ignores, anchor))
+    restored = _restore_checkpoint(sandbox, anchor, vault)
     executed: list[ExecutedStep] = []
     skipped: list[ExecutedStep] = []
 
@@ -270,6 +401,7 @@ def execute_plan(
             shutil.rmtree(sandbox.parent, ignore_errors=True)
 
     return ReplayVerdict(
+        checkpoint_restored=restored,
         replay_run_id=replay_run_id,
         parent_run_id=plan.parent_run_id,
         intervention_kind=intervention_kind,

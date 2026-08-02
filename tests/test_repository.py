@@ -228,7 +228,7 @@ class TestEvidenceShowsWhatTheStepChanged:
         from runopsy_cli.main import app
         from runopsy_collector import Collector
 
-        store = repository / "store"
+        store = repository / ".runopsy"
         with Collector.open(store) as collector:
             record_steps(
                 ["python -c \"open('app.py','w').write('a\\nZ\\nc\\nd\\n')\""],
@@ -323,3 +323,164 @@ class TestTheLoopDetectorCanNowSeeTheFiles:
         events = [_repeated_call(index, output="same") for index in range(1, 5)]
 
         assert _loops(events)
+
+
+class TestCheckpointsMakeAReplayAboutTheOriginalRun:
+    """The gap that made every replay plan warn about itself.
+
+    `build_plan` has always looked for checkpoints and never found one, because nothing
+    took them: a checkpoint needs the working tree, and the trace held only commands. So
+    every plan carried "file state cannot be restored", and every execution started from
+    whatever was on disk *now* — after the failure, after any manual fixing, possibly
+    weeks later. A step that behaved differently said nothing about the original.
+    """
+
+    def test_a_run_in_a_repository_records_points_it_can_return_to(self, repository: Path) -> None:
+        from runopsy_collector import Collector
+        from runopsy_core.schema import CheckpointEvent
+
+        store = repository / ".runopsy"
+        with Collector.open(store) as collector:
+            record_steps(
+                ["python -c \"open('app.py','w').write('broken')\""],
+                run_id="run_ck",
+                task="break the file",
+                sink=collector,
+                vault=collector.vault,
+                cwd=repository,
+            )
+            events = collector.events("run_ck")
+
+        checkpoints = [event for event in events if isinstance(event, CheckpointEvent)]
+        assert checkpoints, "nothing recorded a point the run could be returned to"
+        assert all(event.checkpoint.repo_state for event in checkpoints)
+        assert any(event.checkpoint.patch_digest for event in checkpoints), (
+            "a checkpoint with no patch can be named but not restored"
+        )
+
+    def test_the_patch_is_kept_in_runopsys_vault_not_the_users_repository(
+        self, repository: Path
+    ) -> None:
+        """Runopsy was asked to watch this repository, not to write to it."""
+        from runopsy_collector import Collector
+
+        store = repository / ".runopsy"
+        before = subprocess.run(
+            ["git", "rev-list", "--all", "--count"],
+            cwd=repository,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+        with Collector.open(store) as collector:
+            record_steps(
+                ["python -c \"open('app.py','w').write('broken')\""],
+                run_id="run_ck2",
+                task="break the file",
+                sink=collector,
+                vault=collector.vault,
+                cwd=repository,
+            )
+
+        after = subprocess.run(
+            ["git", "rev-list", "--all", "--count"],
+            cwd=repository,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert before == after, "recording created objects in the user's repository"
+
+    def test_the_replay_restores_the_tree_and_the_failure_goes_away(self, repository: Path) -> None:
+        """End to end, and the point of the whole feature.
+
+        A step breaks a file, a later step notices. Skipping the breaking step is only a
+        real experiment if the sandbox starts from the tree as it was — otherwise the
+        broken file is still there, copied from disk, and the check fails anyway.
+        """
+        from runopsy_collector import Collector
+        from runopsy_core import AnalysisContext
+        from runopsy_replay import build_plan, execute_plan
+
+        (repository / "check.py").write_text(
+            'import pathlib\nassert pathlib.Path("app.py").read_text().startswith("a")\n',
+            encoding="utf-8",
+        )
+        git("add", "-A", cwd=repository)
+        git("commit", "-qm", "add the check", cwd=repository)
+
+        store = repository / ".runopsy"
+        with Collector.open(store) as collector:
+            record_steps(
+                [
+                    "python -c \"open('app.py','w').write('BROKEN')\"",
+                    "python check.py",
+                ],
+                run_id="run_break",
+                task="break then notice",
+                sink=collector,
+                vault=collector.vault,
+                cwd=repository,
+            )
+            events = collector.events("run_break")
+            context = AnalysisContext.from_events("run_break", events)
+
+            onset = next(
+                event.sequence
+                for event in events
+                if isinstance(event, ToolCallEvent) and event.tool.exit_code == 0
+            )
+            plan = build_plan(context, from_sequence=onset)
+            assert plan.checkpoint_sequence is not None, "no checkpoint to anchor the replay"
+
+            verdict = execute_plan(
+                plan,
+                context,
+                collector.vault,
+                collector,
+                replay_run_id="run_break_replay",
+                cwd=repository,
+                skip_onset=True,
+                approve_unknown=True,
+            )
+
+        assert "restored" in verdict.checkpoint_restored
+        assert verdict.supports_onset, (
+            f"skipping the onset did not clear the downstream failure: {verdict}"
+        )
+
+    def test_a_replay_without_a_checkpoint_says_so_rather_than_pretending(
+        self, tmp_path: Path
+    ) -> None:
+        """Outside a repository there is nothing to restore, and the verdict must admit
+        it — a result that looks the same either way is worse than no result."""
+        from runopsy_collector import Collector
+        from runopsy_core import AnalysisContext
+        from runopsy_replay import build_plan, execute_plan
+
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        store = tmp_path / "store"
+        with Collector.open(store) as collector:
+            record_steps(
+                ["python -c pass", "python -c pass"],
+                run_id="run_plain",
+                task="no repository here",
+                sink=collector,
+                vault=collector.vault,
+                cwd=plain,
+            )
+            events = collector.events("run_plain")
+            context = AnalysisContext.from_events("run_plain", events)
+            verdict = execute_plan(
+                build_plan(context, from_sequence=1),
+                context,
+                collector.vault,
+                collector,
+                replay_run_id="run_plain_replay",
+                cwd=plain,
+                approve_unknown=True,
+            )
+
+        assert "no checkpoint" in verdict.checkpoint_restored

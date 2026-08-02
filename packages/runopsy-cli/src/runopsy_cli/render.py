@@ -264,6 +264,12 @@ def replay_verdict(verdict: ReplayVerdict) -> RenderableType:
         )
     else:
         header.append("\nno intervention: a straight re-run", style="dim")
+    if verdict.checkpoint_restored:
+        # Stated because it decides what the result is evidence *about*. Re-running from
+        # the tree as it stood at the checkpoint tests the original run; re-running from
+        # whatever is on disk today tests today, and the reader has to be able to tell
+        # which they were handed.
+        header.append(f"\n{verdict.checkpoint_restored}", style="dim")
     parts.append(header)
 
     ran = [step for step in verdict.executed if step.ran]
