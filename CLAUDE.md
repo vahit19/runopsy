@@ -14,7 +14,11 @@ That makes this file the working authority for what has been decided, so it has 
 
 Replay execution runs a counterfactual experiment in a sandbox copy; a supporting result upgrades a candidate to `replay_supported`, including creating one at a step the detectors could not see. Configuration lives in `runopsy.toml` (`runopsy config --init`); every key is honored and unknown keys are reported. Payload text is kept in a local vault (hashes only in the trace; secrets redacted; redacted payloads refuse to execute).
 
-**Not built yet:** PyPI publication, see `RELEASING.md`.
+**Published.** All ten Python distributions are on PyPI; `pip install runopsy` works and is verified from a clean venv. 0.1.0 is published *and loses steps under parallel recording* — anyone still on it should upgrade.
+
+**What each step did to the repository is now recorded**, which is a coding agent's actual output and was the largest hole in the trace: the commit and branch as state deltas, the changed files with their line counts as a `state_snapshot`, and a `checkpoint` carrying the commit plus a vault patch of what was uncommitted. That last one is what finally makes R2 session fork real — `runopsy replay --execute` restores the tree before re-running, so the experiment is about the original run rather than about whatever is on disk today.
+
+**A journal can now be checked against itself.** `runopsy verify` recomputes a rolling digest written as events are appended. It is tamper *evidence*, not tamper proofing — whoever can edit a journal can delete the seal beside it — and an unsealed journal is reported as unsealed rather than as broken, because treating unknown as tampered would make the check worthless. The append and the fold happen inside one lock: without that, two parallel writers order their bytes one way in the file and another in the chain, and the recorder accuses itself.
 
 The opt-in real-run corpus (section 17.1 layer four) now has its mechanism: `runopsy label` turns a recorded run into a JSON case carrying the trace's hashes and no payload text, and `runopsy bench --corpus DIR` scores against those instead of the synthetic suite. The corpus itself only grows by being used. Two rules are enforced rather than documented: a label needs a named human (`labelled_by`), and nothing reads what `diagnose` found — a corpus scored against the engine's own opinion would only confirm what it already believes.
 
@@ -69,7 +73,7 @@ Measured onset localization, reproducible via `runopsy bench --compare` and reco
 
 ```bash
 uv sync                       # install; pins Python 3.12 via .python-version
-uv run pytest                 # ~830 tests, ~130s; coverage gate is 85%
+uv run pytest                 # ~905 tests, ~260s; coverage gate is 85%
 uv run pytest tests/test_diagnose.py::TestConfidence   # one class
 uv run ruff check . && uv run ruff format .
 # Every package, named explicitly: the CI matrix runs bash and PowerShell, and
@@ -272,6 +276,7 @@ runopsy replay  [RUN|latest] --from-step N [--model M]   # plans; --execute test
 runopsy graph   [RUN|latest] [--format text|dot] [-o FILE]
 runopsy export  [RUN|latest] [-o FILE] [--include-sensitive] [--otlp]
 runopsy ui                                               # loopback only
+runopsy verify [RUN|latest] [--all]                       # was this trace edited after recording?
 runopsy prune [--apply]                                  # never expires anything on its own
 runopsy label  [RUN|latest] --onset N --by NAME [--healthy] [--category C]
 runopsy bench [--compare] [--corpus DIR] [--inject] [--perf] [--write PATH]
@@ -322,3 +327,7 @@ These are encoded in code and tests, not conventions. If one starts failing, the
 - The JSONL journal is authoritative; the DuckDB index is rebuildable from it. Recording writes the journal **first** and survives an index failure, and reading reconciles the index against the journals rather than trusting it. Neither half is optional: DuckDB admits a single writing process, so an adapter that spawns a process per event will lose index writes as a matter of course, and an invariant nothing acts on is a comment.
 - A step number is an identity, not a label — an adapter builds the event id out of it — so allocation goes through `SequenceAllocator` under a file lock. Two events sharing a number are one event to every layer downstream, and the second is deduplicated out of the trace without anything reporting a loss.
 - Diagnosis is a pure function of the trace — no clock, no network, no model — so the same run always yields the same bundle.
+- Recording observes; it does not intervene. The store excludes itself from the repository it sits in, because an agent's own `git add -A` swept it into a commit and then failed on the open index — Runopsy changing the outcome of the run it was watching. Checkpoint patches go to Runopsy's vault, never into the user's object store.
+- A journal is sealed as it is written, and the seal is checked rather than assumed. `verify` says intact, broken or **unsealed**; the third is not the second. Sealing must never call a correct journal modified, which is why the append and the digest happen under one lock.
+- The store's version stamp is written once, at creation, and compared afterwards. Upserting it meant reading a store relabelled it — destroying the only evidence that its history predated a format change. A store from a newer build is refused rather than written to in a shape it cannot describe.
+- Anything shown to a user that is not `intact` must distinguish "we know it is wrong" from "we cannot tell". Collapsing the two is how a check becomes noise and then gets ignored.
