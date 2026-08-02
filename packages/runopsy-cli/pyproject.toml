@@ -1,6 +1,6 @@
 [project]
 name = "runopsy-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "The Runopsy command line: diagnose agent runs and inspect the evidence"
 readme = "README.md"
 requires-python = ">=3.12"

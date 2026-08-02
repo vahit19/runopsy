@@ -5,6 +5,57 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-08-02
+
+A correctness release. Anyone recording with 0.1.0 should upgrade: it loses steps, and
+it loses them quietly.
+
+**Fixed — recording under parallelism.** An agent that delegates to parallel subagents
+fires one `runopsy hook` process per event, and DuckDB admits a single writing process.
+Thirty-two concurrent hooks against one store lost twelve events. Silently, because a
+hook's first duty is not to break the run it observes, so it swallowed the error and
+exited zero and the run looked recorded. Three separate faults: dedup queried the index
+before the journal was appended, so a locked database discarded the event before anything
+durable existed; opening the collector connects to the index, so contention failed the
+write path outright; and step numbers came from `SELECT MAX(sequence) + 1`, which two
+subagents in one session took simultaneously — an adapter builds the event id out of that
+number, so the second step was deduplicated away as a repeat of the first. Now
+thirty-two of thirty-two.
+
+**Fixed — the index no longer has to be repaired by hand.** "The journal is
+authoritative and the index is rebuildable" was true of the design and not of the code:
+nothing rebuilt. Reading now reconciles the two, so a run recorded and diagnosed
+immediately is not whichever steps won the race. A run recorded entirely through the
+journal-only fallback is also listed by `runopsy runs` and reachable as `latest`.
+
+**Fixed — recording no longer alters the run it observes.** The store sits inside the
+working tree by default, so an agent's own `git add -A` swept it into a commit and then
+failed, DuckDB holding the index open where git wanted to read. The store excludes itself
+now, without touching the user's own ignore file.
+
+**Added — what each step did to the repository.** A coding agent's real output is the
+working tree, and the trace did not contain it. Each step now carries the commit and
+branch it moved to, and the files it changed with their line counts; `runopsy evidence`
+shows them. Turn it off with `capture.git = false`.
+
+**Improved — the loop detector can see files.** A repeated verification command is not a
+loop while the working tree keeps reaching states it has not been in. Benchmark
+unchanged; an ordinary edit-test cycle no longer reports a loop.
+
+**Added — local models.** `semantic.base_url` accepts any OpenAI-compatible endpoint, and
+a loopback address needs no key. Pointed at Ollama, the semantic layer runs with nothing
+leaving the machine — which the local-first promise already claimed and this one package
+could not deliver.
+
+**Added — provider retry.** Four attempts, waiting 0.1s, 0.2s and 0.4s, and only for a
+timeout or a refused connection. An HTTP status means the provider answered: repeating a
+4xx cannot mend it, a 429 met with an immediate retry is how a rate limit becomes a ban,
+and a 5xx may have already run — and billed for — the model.
+
+**Added — `runopsy doctor` looks at the store**, not only at the settings: whether the
+index has fallen behind the journals, and whether any journal has duplicate step numbers,
+events out of order, or events belonging to another run.
+
 ## [0.1.0] — 2026-07-31
 
 First release. The deterministic pipeline works end to end: record a run, find where it

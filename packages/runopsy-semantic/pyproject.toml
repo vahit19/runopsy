@@ -1,6 +1,6 @@
 [project]
 name = "runopsy-semantic"
-version = "0.1.0"
+version = "0.1.1"
 description = "Optional, budget-bounded semantic analysis for Runopsy diagnoses"
 readme = "README.md"
 requires-python = ">=3.12"
