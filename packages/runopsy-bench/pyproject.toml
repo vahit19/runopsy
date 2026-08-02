@@ -1,6 +1,6 @@
 [project]
 name = "runopsy-bench"
-version = "0.1.5"
+version = "0.1.6"
 description = "Labelled synthetic traces and localization metrics for Runopsy"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,7 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core==0.1.5",
+    "runopsy-core==0.1.6",
 ]
 
 [project.urls]

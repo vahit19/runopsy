@@ -17,7 +17,7 @@ from runopsy_replay.plan import (
 )
 from runopsy_replay.risk import NEVER_AUTOMATIC, REPEATABLE, SideEffect, classify, is_repeatable
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 __all__ = [
     "DEFAULT_SANDBOX_IGNORES",

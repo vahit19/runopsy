@@ -1650,6 +1650,10 @@ def bench(
         Path | None,
         typer.Option("--corpus", help="Score labelled real runs from this directory instead."),
     ] = None,
+    trail: Annotated[
+        Path | None,
+        typer.Option("--trail", help="Score against TRAIL: expert-annotated agent traces."),
+    ] = None,
 ) -> None:
     """Score the engine against labelled traces.
 
@@ -1660,6 +1664,10 @@ def bench(
     is the number that eventually matters: synthetic cases prove the ranking behaves as
     designed, and only real ones show whether it helps.
     """
+    if trail is not None:
+        _report_trail(trail)
+        return
+
     if corpus is not None:
         _report_corpus(corpus)
         return
@@ -1878,6 +1886,40 @@ def _healthiest_recorded_run(store: Path | None) -> tuple[list[Event] | None, st
             if best is None or len(events) > len(best[0]):
                 best = (events, f"{summary.run_id} ({len(events)} events, {summary.runtime})")
     return (None, "") if best is None else best
+
+
+def _report_trail(directory: Path) -> None:
+    """Score against TRAIL, the one external benchmark of *coding-agent* traces that a
+    human annotated.
+
+    Who&When gave human labels on conversations; this gives them on agent executions,
+    31 of which come from SWE-Bench. That combination — real coding sessions, expert
+    judgement about where each went wrong — is the measurement this project has never
+    had and cannot manufacture for itself.
+    """
+    from runopsy_bench.trail import TrailShapeError, access_hint, load_local, write_corpus
+
+    if not directory.is_dir():
+        errors.print(access_hint(), style="yellow")
+        raise typer.Exit(code=2)
+
+    try:
+        records = load_local(directory)
+    except TrailShapeError as error:
+        errors.print(f"{error}", style="red")
+        raise typer.Exit(code=2) from error
+
+    if not records:
+        errors.print(f"No TRAIL annotation files in {directory}.", style="yellow")
+        raise typer.Exit(code=2)
+
+    staged = directory.parent / "trail-corpus"
+    written = write_corpus(records, staged)
+    console.print(
+        f"Read {len(records)} TRAIL trace(s); {written} carry an onset that can be scored.\n",
+        style="dim",
+    )
+    _report_corpus(staged)
 
 
 def _report_corpus(directory: Path) -> None:

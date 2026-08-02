@@ -5,6 +5,25 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-08-03
+
+**Added — a reader for TRAIL.** The corpus this project has always been missing is
+human-labelled traces of *coding* agents: Who&When supplies expert labels but its traces
+are conversations, so the structural layers have nothing to read. TRAIL supplies both —
+148 agent executions annotated by four expert annotators, 31 of them from SWE-Bench,
+recorded through OpenTelemetry using the OpenInference conventions this schema was built
+on. `runopsy bench --trail DIR` reads it and scores against it.
+
+The dataset is access-gated, and accepting somebody's terms is not something a tool may
+do on their behalf. So the command says exactly what is needed — accept the terms, set
+HF_TOKEN — and reads a directory downloaded by any other means instead.
+
+The conversion is written against the dataset's published description rather than
+against its data, because the gate is doing its job and no record could be opened from
+here. It therefore discovers field names rather than assuming them and **refuses a file
+it does not recognise** instead of producing a plausible case from it: a score computed
+over a mis-parsed import would be measuring the importer, and nothing would say so.
+
 ## [0.1.5] — 2026-08-02
 
 **Added — fault injection into runs that were actually recorded.** `runopsy bench

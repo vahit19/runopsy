@@ -157,7 +157,7 @@ def _read_json(url: str, *, subset: str, index: int, timeout: float) -> Any | No
     last: Exception | None = None
     for attempt in range(len(RETRY_BACKOFF_SECONDS) + 1):
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310 - https enforced above
+            with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             if error.code == 404:
