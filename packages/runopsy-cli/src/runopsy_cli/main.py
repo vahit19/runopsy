@@ -14,6 +14,7 @@ from typing import Annotated, Final
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from runopsy_adapter import hermes, record_steps
 from runopsy_adapter import launch as launcher
@@ -21,7 +22,7 @@ from runopsy_bench import compare_strategies, comparison_markdown, run_benchmark
 from runopsy_cli import __version__, render
 from runopsy_cli.config import CONFIG_FILENAME, RunopsyConfig, example_config, load_config
 from runopsy_cli.report import render_report
-from runopsy_collector import Collector
+from runopsy_collector import Collector, SealState, SealVerdict, StoreFromTheFutureError
 from runopsy_core import AnalysisContext, apply_replay_evidence, to_otlp_json
 from runopsy_core import diagnose as run_diagnosis
 from runopsy_core.detectors import default_registry
@@ -117,8 +118,47 @@ def _resolve_run(collector: Collector, run_id: str) -> str:
     return resolved
 
 
+def cli() -> None:
+    """The console entry point.
+
+    Exists so one refusal reaches the user as a sentence rather than a traceback: a store
+    written by a newer Runopsy is declined, and the person holding it needs to be told to
+    upgrade, not shown a stack. Every command opens a store, so catching it here covers
+    all of them without threading a handler through each.
+    """
+    try:
+        app()
+    except StoreFromTheFutureError as error:
+        errors.print(str(error), style="red")
+        raise SystemExit(2) from error
+
+
+def _print_version(value: bool) -> None:
+    """``--version``, which every command-line tool is expected to answer.
+
+    It did not exist, so the flag people reach for first — in a bug report, in a support
+    thread, in a CI log — printed a usage error instead of the one fact being asked for.
+    """
+    if value:
+        typer.echo(f"runopsy {__version__}")
+        raise typer.Exit
+
+
 @app.callback()
-def main(context: typer.Context, store: StoreOption = None) -> None:
+def main(
+    context: typer.Context,
+    store: StoreOption = None,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-V",
+            help="Print the version and exit.",
+            callback=_print_version,
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
     """Show where this machine stands, and what to type next, when given no command."""
     if context.invoked_subcommand is not None:
         return
@@ -217,6 +257,24 @@ def hook_command(
         print(f"runopsy: could not record {event}: {type(error).__name__}", file=sys.stderr)
 
     typer.echo(decision)
+
+
+def _port_is_taken(host: str, port: int) -> bool:
+    """Whether something is already listening, asked before uvicorn tries to bind.
+
+    A test rather than a caught exception, because uvicorn logs its own failure before
+    raising and the message it logs is the one this exists to replace.
+    """
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.5)
+        try:
+            return probe.connect_ex((host, port)) == 0
+        except OSError:
+            # An address this machine cannot even attempt is not a busy port. Let the
+            # server start and report the real problem itself.
+            return False
 
 
 def _is_local_endpoint(url: str) -> bool:
@@ -604,9 +662,7 @@ def diagnose(
             # "usable with no key at all" false for the only layer that could spend
             # money. The placeholder is sent because OpenAI-compatible servers expect
             # the header to exist, not because anything checks it.
-            local = bool(config.semantic_base_url) and _is_local_endpoint(
-                config.semantic_base_url
-            )
+            local = bool(config.semantic_base_url) and _is_local_endpoint(config.semantic_base_url)
             key = resolve_api_key() or ("local" if local else None)
             if key is None:
                 errors.print(
@@ -839,6 +895,12 @@ def demo_command(
     with Collector.open(target) as collector:
         events = worked.trace()
         recorded = collector.record_all(events)
+        # The originals behind the hashes. Without them `runopsy evidence` on the demo
+        # answers "not kept locally" — the product's central claim, that a finding leads
+        # back to the thing that happened, unillustrated at the one moment a new user
+        # goes looking for it.
+        for text in worked.payload_texts():
+            collector.vault.put(text)
         context = AnalysisContext.from_events(worked.RUN_ID, collector.events(worked.RUN_ID))
         bundle = run_diagnosis(context)
         summary = collector.store.run(worked.RUN_ID)
@@ -1255,6 +1317,18 @@ def ui(
             style="yellow",
         )
 
+    if _port_is_taken(host, port):
+        # Uvicorn's own answer here is a WinError 10048 in the operating system's
+        # language, which tells somebody who typed one command that a socket bind
+        # failed. The fix they need is a different number, so say that.
+        errors.print(
+            f"Port {port} on {host} is already in use — most often a Runopsy web view "
+            f"you have open in another terminal.\n"
+            f"Use a different one:  runopsy ui --port {port + 1}",
+            style="red",
+        )
+        raise typer.Exit(code=2)
+
     console.print(f"Runopsy at http://{host}:{port} — press Ctrl+C to stop.")
     uvicorn.run(create_app(store), host=host, port=port, log_level="warning")
 
@@ -1361,6 +1435,23 @@ def _runopsy_recorded(collector: Collector, run_id: str) -> bool:
     return (collector.paths.run_dir(run_id) / COUNTER_NAME).exists()
 
 
+def _describe_seals(verdicts: list[SealVerdict]) -> str:
+    """Whether the recorded journals are still the ones that were recorded.
+
+    Unsealed runs are counted apart from broken ones on purpose. One means nobody can
+    say; the other means somebody can, and the answer is no.
+    """
+    if not verdicts:
+        return "nothing recorded yet"
+    broken = sum(1 for verdict in verdicts if verdict.state is SealState.BROKEN)
+    unsealed = sum(1 for verdict in verdicts if verdict.state is SealState.UNSEALED)
+    if broken:
+        return f"{broken} run(s) MODIFIED since recording — run `runopsy verify --all`"
+    if unsealed:
+        return f"{len(verdicts) - unsealed} sealed, {unsealed} predate sealing"
+    return f"all {len(verdicts)} unchanged since recording"
+
+
 def _describe_index(reindexed: int) -> str:
     """Whether the index had fallen behind the journals, and by how much.
 
@@ -1381,6 +1472,67 @@ def _describe_integrity(anomalies: list[str]) -> str:
 
 
 @app.command()
+def verify(
+    run_id: RunArgument = LATEST,
+    store: StoreOption = None,
+    every: Annotated[
+        bool, typer.Option("--all", help="Check every recorded run instead of one.")
+    ] = False,
+) -> None:
+    """Check that a recorded run has not been altered since it was recorded.
+
+    Separate from the integrity check, and the pair is the point. Integrity asks whether
+    the recorder did its job — no gaps, no duplicates, in order. This asks whether
+    anything has happened to the file *since*, which no amount of well-formedness can
+    answer: a trace with one line quietly rewritten is perfectly contiguous, and every
+    other check in this system would call it intact.
+
+    What it establishes is that a trace handed to somebody else, or read back a week
+    later, is byte-for-byte the one that was recorded. It is tamper evidence, not tamper
+    proofing: whoever can edit the journal can delete the seal beside it, and a signature
+    that survived that would need a key this machine has nowhere safe to keep. Saying so
+    plainly is worth more than a claim that does not hold.
+    """
+    with Collector.open(store) as collector:
+        targets = (
+            list(collector.paths.known_run_ids()) if every else [_resolve_run(collector, run_id)]
+        )
+        if not targets:
+            errors.print("No runs recorded yet.", style="red")
+            raise typer.Exit(code=2)
+        verdicts = {target: collector.verify(target) for target in targets}
+
+    table = Table(box=None, pad_edge=False, header_style="bold")
+    table.add_column("run")
+    table.add_column("state")
+    table.add_column("detail")
+    for target, verdict in verdicts.items():
+        colour = {"intact": "green", "broken": "red"}.get(verdict.state.value, "yellow")
+        table.add_row(target, Text(verdict.state.value, style=colour), verdict.describe())
+    console.print(table)
+
+    broken = [name for name, verdict in verdicts.items() if verdict.state.value == "broken"]
+    if broken:
+        errors.print(
+            f"\n{len(broken)} run(s) no longer match their seal. A diagnosis is an "
+            "argument about what happened, and this is the evidence it rests on.",
+            style="red",
+        )
+        raise typer.Exit(code=1)
+
+    unsealed = [name for name, verdict in verdicts.items() if verdict.state.value == "unsealed"]
+    if unsealed:
+        # Not a failure. An unsealed journal predates sealing or came from another tool,
+        # and treating "unknown" as "tampered" would make this check worthless within a
+        # week of shipping it.
+        console.print(
+            f"\n{len(unsealed)} run(s) have no seal — recorded before sealing existed, "
+            "or imported. Newly recorded runs are sealed automatically.",
+            style="dim",
+        )
+
+
+@app.command()
 def doctor(store: StoreOption = None) -> None:
     """Report what is configured, without revealing any secret.
 
@@ -1393,6 +1545,8 @@ def doctor(store: StoreOption = None) -> None:
         run_count = len(collector.runs())
         reindexed = collector.reconcile_all()
         anomalies = _integrity_anomalies(collector)
+        versions = collector.store.written_by
+        seals = [collector.verify(run) for run in collector.paths.known_run_ids()]
 
     table = Table(box=None, pad_edge=False, show_header=False)
     table.add_row("store", str(paths.root))
@@ -1400,6 +1554,8 @@ def doctor(store: StoreOption = None) -> None:
     table.add_row("runs recorded", str(run_count))
     table.add_row("index", _describe_index(reindexed))
     table.add_row("journals", _describe_integrity(anomalies))
+    table.add_row("format", versions.describe())
+    table.add_row("seals", _describe_seals(seals))
     table.add_row("detectors", f"{len(default_registry())} deterministic")
 
     # Reported by presence and source only. A key printed to a terminal is a key in

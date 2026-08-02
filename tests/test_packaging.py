@@ -166,7 +166,7 @@ class TestWhatPipInstallRunopsyGives:
             (ROOT / "packages" / "runopsy-cli" / "pyproject.toml").read_text(encoding="utf-8")
         )
 
-        assert cli["project"]["scripts"]["runopsy"] == "runopsy_cli.main:app"
+        assert cli["project"]["scripts"]["runopsy"] == "runopsy_cli.main:cli"
 
 
 class TestTheParticularReleaseCannotComeApart:

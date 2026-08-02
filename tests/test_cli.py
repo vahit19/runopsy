@@ -333,6 +333,41 @@ class TestRunsAndDoctor:
         assert "no provider key" in output
 
 
+class TestTheFlagsPeopleReachForFirst:
+    def test_it_answers_dash_dash_version(self) -> None:
+        """Printing a usage error to `--version` is the first thing a bug report hits."""
+        from runopsy_cli import __version__
+
+        result = runner.invoke(app, ["--version"])
+
+        assert result.exit_code == 0
+        assert __version__ in result.output
+
+    def test_the_short_form_works_too(self) -> None:
+        from runopsy_cli import __version__
+
+        assert __version__ in runner.invoke(app, ["-V"]).output
+
+    def test_a_busy_port_is_explained_in_terms_of_the_fix(
+        self, store: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Uvicorn's own answer is a socket bind error in the operating system's
+        language. The person who typed one command needs a different number."""
+        monkeypatch.setattr("runopsy_cli.main._port_is_taken", lambda host, port: True)
+
+        result = runner.invoke(app, ["ui", "--store", str(store), "--port", "8756"])
+
+        assert result.exit_code == 2
+        assert "already in use" in result.output
+        assert "--port 8757" in result.output
+
+    def test_a_free_port_is_not_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Guards the guard: a probe that always said "taken" would block every launch."""
+        from runopsy_cli.main import _port_is_taken
+
+        assert _port_is_taken("127.0.0.1", 1) is False
+
+
 class TestTheWelcomeScreen:
     """What someone sees the first time they type `runopsy`.
 
@@ -465,6 +500,30 @@ class TestTheDemoAFirstTimeUserRuns:
 
         assert [e.event_id for e in first] == [e.event_id for e in second]
         assert [e.timestamp for e in first] == [e.timestamp for e in second]
+
+    def test_the_demo_keeps_the_text_behind_its_own_hashes(self, tmp_path: Path) -> None:
+        """The demo hashed command text it never stored, so `runopsy evidence` on the
+        one run a new user has answered "not kept locally" — the central claim of the
+        product going unillustrated at the exact moment somebody looks for it."""
+        store = tmp_path / "demo"
+        runner.invoke(app, ["demo", "--store", str(store)])
+
+        output = invoke("evidence", "demo_run", "--step", "9", "--store", str(store))
+
+        assert "write_config config/test.yaml env=production" in output
+        assert "not kept locally" not in output
+
+    def test_the_demo_evidence_explains_the_failure_five_steps_later(self, tmp_path: Path) -> None:
+        """The onset writes a production endpoint; the symptom cannot reach it. A reader
+        should be able to see the connection rather than be told it."""
+        store = tmp_path / "demo"
+        runner.invoke(app, ["demo", "--store", str(store)])
+
+        onset = invoke("evidence", "demo_run", "--step", "9", "--store", str(store))
+        symptom = invoke("evidence", "demo_run", "--step", "14", "--store", str(store))
+
+        assert "api.example.com" in onset
+        assert "api.example.com" in symptom
 
     def test_a_first_run_is_pointed_at_the_demo(self, tmp_path: Path) -> None:
         """With nothing recorded, `record` asks someone to already believe the tool is

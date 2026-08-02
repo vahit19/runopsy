@@ -11,6 +11,7 @@ import csv
 import tempfile
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
@@ -165,6 +166,20 @@ still fails.
 """
 
 
+def _is_newer(found: str, understood: str) -> bool:
+    """Whether ``found`` is a later version than this build writes.
+
+    Compared component by component as integers, so 0.10 is later than 0.9 rather than
+    earlier — the comparison a string would get wrong exactly once, at the version where
+    getting it wrong means refusing to open a store that is perfectly readable.
+    """
+
+    def parts(value: str) -> list[int]:
+        return [int(piece) if piece.isdigit() else 0 for piece in value.split(".")]
+
+    return parts(found) > parts(understood)
+
+
 def _connect_with_patience(database: Path, timeout: float) -> duckdb.DuckDBPyConnection:
     """Open the index, retrying while another process holds it."""
     deadline = time.monotonic() + timeout
@@ -181,6 +196,48 @@ def _connect_with_patience(database: Path, timeout: float) -> duckdb.DuckDBPyCon
             delay = min(delay * 2, 0.4)
 
 
+@dataclass(frozen=True)
+class StoreVersions:
+    """The versions a store was written with, and how they compare to this build."""
+
+    store_version: str
+    schema_version: str
+    newly_created: bool
+
+    @property
+    def matches_this_build(self) -> bool:
+        return self.store_version == STORE_VERSION and self.schema_version == SCHEMA_VERSION
+
+    def describe(self) -> str:
+        if self.matches_this_build:
+            return f"schema {self.schema_version} (current)"
+        return (
+            f"schema {self.schema_version}, store {self.store_version} — "
+            f"this build writes schema {SCHEMA_VERSION}, store {STORE_VERSION}"
+        )
+
+
+class StoreFromTheFutureError(RuntimeError):
+    """A store written by a newer Runopsy than this one.
+
+    Refused rather than opened, and this is the one version mismatch worth refusing.
+    Reading it would be tolerable; *writing* to it is not, because this build would
+    serialize events without fields it has never heard of and the journal would end up
+    holding two incompatible shapes with nothing recording which is which. Telling
+    somebody to upgrade costs them a minute. Silently degrading their history costs them
+    the history.
+    """
+
+    def __init__(self, found: str, understood: str) -> None:
+        super().__init__(
+            f"this store was written with schema {found}; this Runopsy understands "
+            f"{understood}. Upgrade with `pip install --upgrade runopsy`, or point "
+            f"--store at a different directory."
+        )
+        self.found = found
+        self.understood = understood
+
+
 class EventStore:
     """Queryable index over recorded events."""
 
@@ -190,11 +247,39 @@ class EventStore:
         self._seen_runs: set[str] = set()
         self._connection = _connect_with_patience(database, connect_timeout)
         self._connection.execute(_DDL)
-        self._connection.execute(
-            "INSERT INTO store_meta (key, value) VALUES (?, ?), (?, ?) "
-            "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-            ["store_version", STORE_VERSION, "schema_version", SCHEMA_VERSION],
-        )
+        self.written_by = self._stamp_or_check()
+
+    def _stamp_or_check(self) -> StoreVersions:
+        """Record the versions on a new store; on an existing one, leave them alone.
+
+        This used to be an upsert, which meant opening a store written by an older build
+        silently restamped it with today's numbers. That is worse than not checking at
+        all: the one piece of evidence that the history was recorded under a different
+        schema was destroyed by the act of looking at it, and nothing downstream could
+        ever tell.
+
+        So the stamp is written once, at creation. An older store keeps saying it is
+        older — `runopsy doctor` reports that, and each event carries its own version
+        besides. A *newer* store is refused, because this build would write events into
+        it in a shape it does not know how to describe.
+        """
+        rows = self._connection.execute(
+            "SELECT key, value FROM store_meta WHERE key IN ('store_version', 'schema_version')"
+        ).fetchall()
+        recorded = {str(key): str(value) for key, value in rows}
+
+        if not recorded:
+            self._connection.execute(
+                "INSERT INTO store_meta (key, value) VALUES (?, ?), (?, ?)",
+                ["store_version", STORE_VERSION, "schema_version", SCHEMA_VERSION],
+            )
+            return StoreVersions(STORE_VERSION, SCHEMA_VERSION, newly_created=True)
+
+        found_schema = recorded.get("schema_version", SCHEMA_VERSION)
+        found_store = recorded.get("store_version", STORE_VERSION)
+        if _is_newer(found_schema, SCHEMA_VERSION) or _is_newer(found_store, STORE_VERSION):
+            raise StoreFromTheFutureError(found_schema, SCHEMA_VERSION)
+        return StoreVersions(found_store, found_schema, newly_created=False)
 
     def __enter__(self) -> Self:
         return self

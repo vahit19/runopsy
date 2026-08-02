@@ -49,14 +49,28 @@ def _at(sequence: int) -> datetime:
     return START + timedelta(seconds=sequence * 7)
 
 
+_TEXTS: list[str] = []
+"""Every command and output the demo hashes, so the vault can hold the originals.
+
+The demo used to hash text it never stored, which made `runopsy evidence` on the demo
+run say "not kept locally" — the product's central claim, that a finding can be traced
+back to the thing that happened, going unillustrated at the exact moment a new user looks
+for it. The texts are collected as the trace is built so the two cannot drift apart.
+"""
+
+
 def _tool(
     sequence: int,
     name: str,
     *,
     exit_code: int = 0,
     arguments: str = "",
+    output: str = "",
     state: dict[str, object] | None = None,
 ) -> Event:
+    command = arguments or name
+    result = output or f"{name}: ok"
+    _TEXTS.extend((command, result))
     return ToolCallEvent(
         event_id=f"{RUN_ID}_evt_{sequence:02d}",
         run_id=RUN_ID,
@@ -66,12 +80,24 @@ def _tool(
             name=name,
             exit_code=exit_code,
             status=CallStatus.ERROR if exit_code else CallStatus.OK,
-            arguments_hash=hash_text(arguments or name),
-            output_hash=hash_text(f"{name}:{sequence}"),
+            arguments_hash=hash_text(command),
+            output_hash=hash_text(result),
             duration_ms=400 + sequence * 30,
         ),
         state_delta={key: StateChange(after=value) for key, value in (state or {}).items()},
     )
+
+
+def payload_texts() -> tuple[str, ...]:
+    """The originals behind the hashes, for the vault.
+
+    Built by calling :func:`trace`, because the texts are registered as the events are
+    constructed — asking for them without building the trace would return an empty vault
+    and silently reproduce the defect this exists to fix.
+    """
+    _TEXTS.clear()
+    trace()
+    return tuple(dict.fromkeys(_TEXTS))
 
 
 def _think(sequence: int) -> Event:
@@ -105,27 +131,84 @@ def trace() -> list[Event]:
             ),
         ),
         _think(1),
-        _tool(2, "read_file", arguments="tests/test_checkout.py"),
-        _tool(3, "read_file", arguments="src/payments/client.py"),
+        _tool(
+            2,
+            "read_file",
+            arguments="cat tests/test_checkout.py",
+            output="def test_checkout_charges_once():\n    assert charge(order).status == 'paid'",
+        ),
+        _tool(
+            3,
+            "read_file",
+            arguments="cat src/payments/client.py",
+            output="ENDPOINT = os.environ['PAYMENTS_ENDPOINT']\ndef charge(order): ...",
+        ),
         _think(4),
-        _tool(5, "grep", arguments="endpoint"),
-        _tool(6, "read_file", arguments="config/test.yaml"),
+        _tool(
+            5,
+            "grep",
+            arguments="grep -rn endpoint config/",
+            output=(
+                "config/test.yaml:3:  endpoint: http://localhost:8080\n"
+                "config/prod.yaml:3:  endpoint: https://api.example.com"
+            ),
+        ),
+        _tool(
+            6,
+            "read_file",
+            arguments="cat config/test.yaml",
+            output="env: test\nendpoint: http://localhost:8080\ntimeout: 5",
+        ),
         _think(7),
-        _tool(8, "checkpoint", arguments="before config edit"),
+        _tool(
+            8,
+            "checkpoint",
+            arguments="checkpoint before config edit",
+            output="saved checkpoint ck_8 (working tree clean)",
+        ),
         # Here. The write fails, the agent carries on, and the environment is now wrong.
         _tool(
             ONSET_STEP,
             "write_config",
             exit_code=1,
-            arguments="config/test.yaml env=production",
+            arguments="write_config config/test.yaml env=production",
+            output=(
+                "error: refusing to set env=production in a test config\n"
+                "wrote endpoint: https://api.example.com before failing\n"
+                "exit status 1"
+            ),
             state={"config.env": "production"},
         ),
-        _tool(10, "edit_file", arguments="src/payments/client.py"),
-        _tool(11, "restart_service", arguments="payments"),
+        _tool(
+            10,
+            "edit_file",
+            arguments="edit src/payments/client.py",
+            output="1 insertion(+), 1 deletion(-)",
+        ),
+        _tool(
+            11,
+            "restart_service",
+            arguments="systemctl restart payments",
+            output="payments restarted (pid 4412)",
+        ),
         _think(12),
-        _tool(13, "curl", arguments="http://localhost:8080/health"),
+        _tool(
+            13,
+            "curl",
+            arguments="curl -s http://localhost:8080/health",
+            output='{"status": "ok"}',
+        ),
         # ...and only now does anything look wrong, five steps later.
-        _tool(SYMPTOM_STEP, "pytest", exit_code=1, arguments="tests/test_checkout.py"),
+        _tool(
+            SYMPTOM_STEP,
+            "pytest",
+            exit_code=1,
+            arguments="pytest tests/test_checkout.py",
+            output=(
+                "E   ConnectionError: HTTPSConnectionPool(host='api.example.com', port=443)\n"
+                "1 failed in 3.14s"
+            ),
+        ),
         RunEndEvent(
             event_id=f"{RUN_ID}_evt_15",
             run_id=RUN_ID,

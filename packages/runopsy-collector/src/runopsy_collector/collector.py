@@ -19,6 +19,7 @@ from typing import Self
 from runopsy_collector.journal import EventJournal, serialize
 from runopsy_collector.paths import StorePaths
 from runopsy_collector.retention import PrunePlan, PruneResult, apply_prune, plan_prune
+from runopsy_collector.seal import SealVerdict
 from runopsy_collector.sequence import SequenceAllocator
 from runopsy_collector.store import EventStore, RunSummary
 from runopsy_collector.vault import PayloadVault
@@ -247,6 +248,16 @@ class Collector:
         """The run that bare ``latest`` refers to on the command line."""
         runs = self.runs()
         return runs[0].run_id if runs else None
+
+    def verify(self, run_id: str) -> SealVerdict:
+        """Whether a run's journal is byte-for-byte the one that was recorded.
+
+        Separate from :meth:`integrity`, and the pair is the point. Integrity asks
+        whether the recorder did its job — gaps, duplicates, ordering. This asks whether
+        anything has happened to the file *since*, which no amount of well-formedness can
+        answer: a trace with one line quietly rewritten is perfectly contiguous.
+        """
+        return self.journal(run_id).verify()
 
     def integrity(self, run_id: str) -> IntegrityReport:
         """Check a run's journal for gaps, duplicates and reordering.

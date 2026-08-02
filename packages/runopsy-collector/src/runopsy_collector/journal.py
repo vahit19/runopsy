@@ -14,6 +14,8 @@ from pathlib import Path
 import orjson
 from pydantic import TypeAdapter, ValidationError
 
+from runopsy_collector.seal import Seal, SealVerdict
+from runopsy_collector.sequence import LOCK_NAME, exclusive
 from runopsy_core.schema import Event
 
 _events: TypeAdapter[Event] = TypeAdapter(Event)
@@ -54,14 +56,28 @@ class EventJournal:
 
         The file is opened in append mode and flushed on close, so a crash truncates at
         a line boundary at worst; readers stop at the last complete line.
+
+        The write and the seal update happen inside one cross-process lock. They have to:
+        a hook is a fresh process per event, and an agent with parallel subagents runs
+        several at once, so without the lock two writers could fold their bytes into the
+        chain in one order and write them to the file in another. The journal would be
+        perfectly correct and the seal would call it modified — the recorder accusing
+        itself, which is the worst possible failure for a check whose whole purpose is to
+        be believed.
         """
         payload = b"".join(serialize(event) for event in events)
         if not payload:
             return 0
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("ab") as handle:
-            handle.write(payload)
+        with exclusive(self.path.parent / LOCK_NAME):
+            with self.path.open("ab") as handle:
+                handle.write(payload)
+            Seal(self.path.parent).extend(payload)
         return payload.count(b"\n")
+
+    def verify(self) -> SealVerdict:
+        """Whether this journal is byte-for-byte the one that was recorded."""
+        return Seal(self.path.parent).verify(self.path)
 
     def read(self) -> Iterator[Event]:
         """Yield every event in write order.

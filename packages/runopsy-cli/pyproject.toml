@@ -37,7 +37,7 @@ dependencies = [
 ]
 
 [project.scripts]
-runopsy = "runopsy_cli.main:app"
+runopsy = "runopsy_cli.main:cli"
 
 [project.urls]
 Homepage = "https://github.com/vahit19/runopsy"

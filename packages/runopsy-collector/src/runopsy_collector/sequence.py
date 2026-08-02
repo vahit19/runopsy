@@ -31,7 +31,7 @@ LOCK_NAME = ".sequence.lock"
 
 
 @contextlib.contextmanager
-def _exclusive(path: Path) -> Iterator[None]:
+def exclusive(path: Path) -> Iterator[None]:
     """Hold an exclusive cross-process lock for the duration of the block.
 
     Both implementations block until the lock is free and both are released by the
@@ -101,7 +101,7 @@ class SequenceAllocator:
         if count < 1:
             msg = f"count must be positive, got {count}"
             raise ValueError(msg)
-        with _exclusive(self.lock):
+        with exclusive(self.lock):
             start = self._read_or_seed()
             self.counter.write_text(str(start + count), encoding="utf-8")
             return start
@@ -156,4 +156,4 @@ def allocator_for(run_dir: Path) -> SequenceAllocator:
     return SequenceAllocator(run_dir)
 
 
-__all__ = ["COUNTER_NAME", "LOCK_NAME", "SequenceAllocator", "allocator_for"]
+__all__ = ["COUNTER_NAME", "LOCK_NAME", "SequenceAllocator", "allocator_for", "exclusive"]

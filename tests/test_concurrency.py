@@ -35,7 +35,12 @@ from pathlib import Path
 
 import pytest
 
-from runopsy_collector import Collector, SequenceAllocator, StorePaths
+from runopsy_collector import (
+    Collector,
+    SequenceAllocator,
+    StoreFromTheFutureError,
+    StorePaths,
+)
 from runopsy_collector.journal import EventJournal
 from runopsy_collector.sequence import COUNTER_NAME
 
@@ -261,3 +266,72 @@ class TestTheStoreIsPatientAboutContention:
         from runopsy_collector.store import CONNECT_TIMEOUT
 
         assert CONNECT_TIMEOUT >= 1.0
+
+
+class TestTheStoreKnowsWhatWroteIt:
+    """Version metadata that is checked rather than overwritten.
+
+    Opening a store used to upsert today's schema version into it, so a store recorded
+    by an older build was silently restamped by the act of looking at it. That is worse
+    than not checking: the single piece of evidence that the history predates a format
+    change was destroyed, and nothing downstream could ever recover it.
+    """
+
+    def test_a_new_store_records_the_version_that_made_it(self, tmp_path: Path) -> None:
+        from runopsy_core.schema import SCHEMA_VERSION
+
+        with Collector.open(tmp_path / "store") as collector:
+            written = collector.store.written_by
+
+        assert written.newly_created
+        assert written.schema_version == SCHEMA_VERSION
+        assert written.matches_this_build
+
+    def test_an_older_store_keeps_saying_it_is_older(self, tmp_path: Path) -> None:
+        """Reopening must not quietly relabel somebody's history as current."""
+        import duckdb
+
+        store = tmp_path / "store"
+        with Collector.open(store) as collector:
+            database = collector.paths.database
+
+        connection = duckdb.connect(str(database))
+        connection.execute("UPDATE store_meta SET value='0.0' WHERE key='schema_version'")
+        connection.close()
+
+        with Collector.open(store) as collector:
+            written = collector.store.written_by
+
+        assert written.schema_version == "0.0"
+        assert not written.matches_this_build
+        assert not written.newly_created
+
+    def test_a_store_from_a_newer_build_is_refused(self, tmp_path: Path) -> None:
+        """Reading it would be tolerable; writing to it would produce a journal holding
+        two shapes with nothing recording which is which."""
+        import duckdb
+
+        store = tmp_path / "store"
+        with Collector.open(store) as collector:
+            database = collector.paths.database
+
+        connection = duckdb.connect(str(database))
+        connection.execute("UPDATE store_meta SET value='9.9' WHERE key='schema_version'")
+        connection.close()
+
+        with pytest.raises(StoreFromTheFutureError, match=r"9\.9"):
+            Collector.open(store)
+
+    def test_the_refusal_says_what_to_do_about_it(self, tmp_path: Path) -> None:
+        error = StoreFromTheFutureError("9.9", "0.1")
+
+        assert "upgrade" in str(error).lower()
+
+    def test_ten_is_later_than_nine(self) -> None:
+        """The one comparison a string would get wrong, at the version where getting it
+        wrong means refusing a store that is perfectly readable."""
+        from runopsy_collector.store import _is_newer
+
+        assert _is_newer("0.10", "0.9")
+        assert not _is_newer("0.9", "0.10")
+        assert not _is_newer("0.1", "0.1")

@@ -5,6 +5,6 @@ The console script is the normal way in, but a subprocess in a test cannot rely 
 exactly as a runtime does, as a fresh process per event.
 """
 
-from runopsy_cli.main import app
+from runopsy_cli.main import cli
 
-app()
+cli()
