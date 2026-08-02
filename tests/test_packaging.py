@@ -169,6 +169,61 @@ class TestWhatPipInstallRunopsyGives:
         assert cli["project"]["scripts"]["runopsy"] == "runopsy_cli.main:app"
 
 
+class TestTheParticularReleaseCannotComeApart:
+    """Every package pins its siblings, not only the meta-distribution.
+
+    The meta-package pinned `runopsy-cli` and `runopsy-server` exactly, and stopped
+    there: the CLI's own dependencies on core, collector, replay and the rest floated.
+    That was measured going wrong the first time it could. Publishing 0.1.1 while PyPI's
+    index was still catching up resolved a 0.1.1 CLI onto a 0.1.0 collector — the release
+    installed without the fix it was released for, and nothing reported anything unusual.
+
+    A resolution race is the visible version of the standing problem: these packages
+    share one trace schema and are released in lockstep, so any set that is not one
+    version is a set nobody has run the tests against.
+    """
+
+    def manifests(self) -> dict[str, dict[str, Any]]:
+        found = {}
+        for path in sorted((ROOT / "packages").glob("*/pyproject.toml")):
+            project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
+            found[project["name"]] = project
+        return found
+
+    def test_every_sibling_dependency_names_one_version(self) -> None:
+        manifests = self.manifests()
+        names = set(manifests)
+
+        for package, project in manifests.items():
+            for requirement in project.get("dependencies", []):
+                base = requirement.split("==")[0].split(">")[0].split("[")[0].strip()
+                if base in names:
+                    assert "==" in requirement, (
+                        f"{package} depends on {base} without pinning it; "
+                        "a mixed-version install is one nobody has tested"
+                    )
+
+    def test_the_pins_name_the_version_being_released(self) -> None:
+        """A stale pin is worse than none: it resolves, and to the wrong thing."""
+        manifests = self.manifests()
+        version = manifests["runopsy"]["version"]
+
+        for package, project in manifests.items():
+            assert project["version"] == version, f"{package} is not at {version}"
+            for requirement in [
+                *project.get("dependencies", []),
+                *[
+                    item
+                    for group in project.get("optional-dependencies", {}).values()
+                    for item in group
+                ],
+            ]:
+                if requirement.split("==")[0].strip() in manifests:
+                    assert requirement.endswith(f"=={version}"), (
+                        f"{package} pins {requirement}, but this release is {version}"
+                    )
+
+
 class TestTheGatesCannotBeSkippedByAccident:
     def test_type_checking_covers_the_tests_too(self) -> None:
         """Tests are where the type errors that matter tend to be written."""

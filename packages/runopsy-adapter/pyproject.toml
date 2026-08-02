@@ -21,7 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core",
+    "runopsy-core==0.1.1",
     # Reading Hermes' own config to report whether it is wired to us.
     "pyyaml>=6.0",
 ]

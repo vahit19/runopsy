@@ -21,12 +21,12 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core",
-    "runopsy-collector",
-    "runopsy-bench",
-    "runopsy-replay",
-    "runopsy-adapter",
-    "runopsy-semantic",
+    "runopsy-core==0.1.1",
+    "runopsy-collector==0.1.1",
+    "runopsy-bench==0.1.1",
+    "runopsy-replay==0.1.1",
+    "runopsy-adapter==0.1.1",
+    "runopsy-semantic==0.1.1",
     "typer>=0.12",
     "rich>=13.7",
     # Transitive through typer, pinned here because 8.3.2 and below carry

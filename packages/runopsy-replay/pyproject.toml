@@ -21,8 +21,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core",
-    "runopsy-adapter",
+    "runopsy-core==0.1.1",
+    "runopsy-adapter==0.1.1",
     "pydantic>=2.8",
 ]
 

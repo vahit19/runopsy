@@ -5,6 +5,13 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+**Fixed** — every package pins its siblings, not only the meta-distribution. Publishing
+0.1.1 while PyPI's index was catching up resolved a 0.1.1 CLI onto a 0.1.0 collector: the
+release installed without the fix it was released for, and nothing said anything. These
+packages share one trace schema and are released together, so any set that is not one
+version is a set nobody has run the tests against. As published, 0.1.1 resolves correctly
+today, because every sibling is at its newest.
+
 ## [0.1.1] — 2026-08-02
 
 A correctness release. Anyone recording with 0.1.0 should upgrade: it loses steps, and

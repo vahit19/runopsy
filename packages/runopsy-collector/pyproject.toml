@@ -21,7 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core",
+    "runopsy-core==0.1.1",
     "duckdb>=1.1",
     "orjson>=3.10",
 ]
