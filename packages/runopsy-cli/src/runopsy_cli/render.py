@@ -120,6 +120,76 @@ def _candidate_block(
     return lines
 
 
+def _clean_run_block(graph: TraceGraph) -> RenderableType:
+    """What to say when nothing went wrong, which is most runs.
+
+    "Nothing detectable went wrong" and then silence is correct and reads as useless.
+    A user records their ordinary green pipeline, is told there is nothing to report, and
+    concludes the tool does nothing — which is the likeliest way a diagnosis tool gets
+    uninstalled: not by being wrong, by being invisible when it is right.
+
+    So a clean result says what was actually examined and what the run did. The counts
+    are evidence that something looked; the repository summary is information the user
+    did not have before and would have had to go and gather. Both are facts already in
+    the trace, stated rather than withheld because the verdict happened to be "fine".
+    """
+    from runopsy_core.detectors import default_registry
+
+    steps = [node for node in graph.nodes if node.kind is NodeKind.TOOL_CALL]
+    models = [node for node in graph.nodes if node.kind is NodeKind.LLM_CALL]
+
+    lines = Text("\nNothing went wrong that this can detect.\n", style="green")
+    lines.append(
+        f"Checked {len(steps)} tool call(s)"
+        + (f" and {len(models)} model call(s)" if models else "")
+        + f" against {len(default_registry().detectors)} detectors: "
+        "no failing step, no loop, no state conflict.\n",
+        style="dim",
+    )
+
+    changed = _repository_change_summary(graph)
+    if changed:
+        lines.append(f"{changed}\n", style="dim")
+
+    lines.append(
+        "\nThis is the answer, not the absence of one: a healthy run producing no "
+        "finding is exactly what the zero-false-positive rule buys. Keep recording — "
+        "the value arrives on the run that fails.\n",
+        style="dim",
+    )
+    return lines
+
+
+def _repository_change_summary(graph: TraceGraph) -> str:
+    """What the run did to the working tree, in one line, or nothing to say.
+
+    Read off the last repository observation rather than recomputed, so this describes
+    the run as it was recorded and not the directory as it is now.
+    """
+    snapshots = [
+        node
+        for node in graph.nodes
+        if node.kind is NodeKind.STATE_SNAPSHOT and isinstance(node.attributes.get("values"), dict)
+    ]
+    if not snapshots:
+        return ""
+
+    values = max(snapshots, key=lambda node: node.sequence).attributes["values"]
+    if not isinstance(values, dict):
+        return ""
+
+    edits = values.get("git.edits")
+    if isinstance(edits, dict) and edits:
+        added = sum(int(c.get("added", 0)) for c in edits.values() if isinstance(c, dict))
+        removed = sum(int(c.get("removed", 0)) for c in edits.values() if isinstance(c, dict))
+        return f"It left {len(edits)} file(s) changed: +{added} -{removed}."
+    if values.get("git.dirty"):
+        return "It left the working tree with uncommitted changes."
+    if "git.head" in values:
+        return "It left the working tree clean."
+    return ""
+
+
 def diagnosis(
     bundle: DiagnosisBundle, graph: TraceGraph, summary: RunSummary | None
 ) -> RenderableType:
@@ -136,13 +206,7 @@ def diagnosis(
     parts.append(header)
 
     if not bundle.candidates:
-        parts.append(
-            Text(
-                "\nNothing detectable went wrong in this run.\n"
-                "Deterministic analysis found no failing step, loop, or state conflict.",
-                style="green",
-            )
-        )
+        parts.append(_clean_run_block(graph))
         return Group(*parts)
 
     # A run can end successfully with failed steps inside it — an agent that retries and

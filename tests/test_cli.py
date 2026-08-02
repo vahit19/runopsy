@@ -125,8 +125,29 @@ class TestDiagnose:
     def test_a_healthy_run_is_reported_as_clean(self, healthy_store: Path) -> None:
         output = invoke("diagnose", RUN, "--store", str(healthy_store))
 
-        assert "Nothing detectable went wrong" in output
+        assert "Nothing went wrong" in output
         assert "Suspected onset" not in output
+
+    def test_a_clean_result_says_what_it_looked_at(self, healthy_store: Path) -> None:
+        """Most runs are healthy, so this is the output most users see most often.
+
+        "Nothing detectable went wrong" followed by silence is correct and reads as
+        useless: somebody records their ordinary green pipeline, is told there is nothing
+        to report, and concludes the tool does nothing. That is the likeliest way a
+        diagnosis tool gets uninstalled — not by being wrong, by being invisible when it
+        is right. So a clean verdict states what was examined.
+        """
+        output = invoke("diagnose", RUN, "--store", str(healthy_store))
+
+        assert "tool call" in output
+        assert "15 detectors" in output
+
+    def test_a_clean_result_does_not_leave_the_reader_at_a_dead_end(
+        self, healthy_store: Path
+    ) -> None:
+        output = invoke("diagnose", RUN, "--store", str(healthy_store))
+
+        assert "Keep recording" in output
 
     def test_latest_resolves_without_naming_a_run(self, store: Path) -> None:
         output = invoke("diagnose", "--store", str(store))
