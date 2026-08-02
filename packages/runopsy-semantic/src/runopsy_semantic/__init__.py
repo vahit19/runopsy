@@ -31,7 +31,7 @@ from runopsy_semantic.provider import (
 )
 from runopsy_semantic.review import HybridResult, review_diagnosis
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 __all__ = [
     "API_KEY_VARIABLE",

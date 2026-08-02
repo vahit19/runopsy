@@ -5,6 +5,38 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.4] — 2026-08-02
+
+The release where the engine is measured against somebody else's labels.
+
+**Added — scoring against Who&When.** Every number this project published came from
+traces it wrote itself, which is the weakest thing about its evidence. Who&When (Zhang et
+al. 2025) annotates real multi-agent failure logs by hand with the *decisive error step*
+— its authors' term for the earliest mistake whose correction would turn the failure into
+a success, which is this project's definition of a failure onset arrived at
+independently. `runopsy_bench.whoandwhen` imports it; the data is downloaded or read from
+a local copy, never vendored, because the dataset card states no licence.
+
+**The result: 0.0% top-1 on 46 of its cases.** The deterministic engine produces no
+candidate at all. That is a scope boundary, not a defect to tune away: Who&When traces are
+conversations — prose turns, no exit codes, no tool statuses, no repository — and L0-L2
+read exactly those things. The 94.4% this project quotes is on coding-shaped traces. Both
+numbers are now published together.
+
+**Fixed — hybrid mode no longer charges for silence.** When the deterministic layers found
+nothing, `review_diagnosis` returned immediately. So a user whose agent failed *silently*
+— nothing errored, nothing timed out, the answer was simply wrong — asked for a model's
+opinion, paid for the call, and was told the run was clean. That is the failure an agent's
+user is least able to find by hand and the one worth paying for. Hybrid mode now reviews
+the end of a run that reported failure, and still spends nothing on a run nobody said was
+wrong.
+
+**Tried and reverted after measuring.** A `structural:silent_failure` detector, to report
+"the run failed while every step reported success". It fired correctly and cost the
+synthetic benchmark 11 points — some cases fail behaviourally with no failing step, and it
+displaced their real symptom. Trading the primary benchmark to serve a different trace
+shape is a bad deal, so it is not shipped.
+
 ## [0.1.3] — 2026-08-02
 
 Found by installing the published wheel and using it the way a stranger would.

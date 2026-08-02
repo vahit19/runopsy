@@ -9,7 +9,7 @@ from runopsy_collector.sequence import SequenceAllocator
 from runopsy_collector.store import EventStore, RunSummary, StoreFromTheFutureError, StoreVersions
 from runopsy_collector.vault import PayloadEntry, PayloadLookup, PayloadVault
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 __all__ = [
     "Collector",

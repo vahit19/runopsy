@@ -504,3 +504,72 @@ class TestUnexplainedFailureLookback:
         review_diagnosis(self._silent_failure(), api, budget=Budget(max_calls=2))
 
         assert len(transport.requests) == 2
+
+
+class TestTheCaseWorthPayingFor:
+    """A run that failed while every step reported success.
+
+    Nothing errored, nothing timed out, the answer was simply wrong — the silent failure,
+    and the one an agent's user is least able to find by hand. Hybrid mode used to return
+    immediately when the deterministic layers produced no candidate, so somebody whose
+    agent had failed this way asked for a model's opinion and was told the run was clean.
+    Measured on Who&When, an external benchmark of hand-annotated multi-agent failures,
+    every single case has that shape.
+    """
+
+    def silent_failure(self) -> AnalysisContext:
+        events = [
+            run_start(RUN, task="answer the question"),
+            tool(1, name="search"),
+            tool(2, name="read"),
+            tool(3, name="summarise"),
+            run_end(4, RUN, outcome=RunOutcome.FAILURE),
+        ]
+        return AnalysisContext.from_events(RUN, events)
+
+    def test_the_deterministic_layers_find_nothing(self) -> None:
+        """Correctly: there is nothing structural to find."""
+        from runopsy_core import diagnose
+
+        assert not diagnose(self.silent_failure()).candidates
+
+    def test_hybrid_mode_asks_anyway_and_answers(self) -> None:
+        api, transport = client(
+            {"finding": True, "category": "reasoning", "summary": "wrong source", "confidence": 0.6}
+        )
+
+        result = review_diagnosis(self.silent_failure(), api, budget=Budget(max_calls=2))
+
+        assert transport.requests, "hybrid mode spent nothing on a run that failed"
+        assert result.bundle.candidates, "the user paid and got no answer"
+
+    def test_a_healthy_run_still_costs_nothing(self) -> None:
+        """The other half. Asking about a run nobody said was wrong spends a user's
+        money to be told their green pipeline is green."""
+        api, transport = client({"finding": False})
+        healthy = AnalysisContext.from_events(
+            RUN,
+            [
+                run_start(RUN, task="tidy up"),
+                tool(1, name="format"),
+                run_end(2, RUN, outcome=RunOutcome.SUCCESS),
+            ],
+        )
+
+        result = review_diagnosis(healthy, api, budget=Budget(max_calls=2))
+
+        assert transport.requests == []
+        assert not result.bundle.candidates
+
+    def test_what_it_finds_stays_below_certainty(self) -> None:
+        """A model's opinion on a trace with no structural evidence is the weakest kind
+        of finding there is, and must not read as anything more."""
+        api, _ = client(
+            {"finding": True, "category": "reasoning", "summary": "wrong source", "confidence": 0.9}
+        )
+
+        result = review_diagnosis(self.silent_failure(), api, budget=Budget(max_calls=2))
+
+        for candidate in result.bundle.candidates:
+            assert candidate.confidence < 0.75
+            assert candidate.status is not DiagnosisStatus.REPLAY_SUPPORTED

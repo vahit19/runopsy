@@ -138,10 +138,18 @@ def _read_json(url: str, *, subset: str, index: int, timeout: float) -> Any | No
     """Fetch and parse one file, retrying a connection that never landed."""
     import time
 
+    if not url.startswith("https://"):
+        # Enforced rather than assumed. `urlopen` will happily open `file:` and hand back
+        # whatever is on disk, so a caller who could influence the URL could read local
+        # files through a function whose name promises a download. The URL here is built
+        # from a constant, which makes this unreachable today and cheap insurance against
+        # the day somebody parameterises the host.
+        msg = f"refusing to fetch a non-HTTPS URL: {url[:60]}"
+        raise DatasetUnavailableError(msg)
+
     # Identified rather than anonymous. urllib's default agent string is refused by the
-    # host — the connection is reset before any status arrives, which looks like a
-    # network fault and is a policy decision. Saying who is calling is also the courteous
-    # thing when walking someone's dataset file by file.
+    # host, and saying who is calling is the courteous thing when walking someone's
+    # dataset file by file.
     request = urllib.request.Request(
         url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
     )
@@ -149,7 +157,7 @@ def _read_json(url: str, *, subset: str, index: int, timeout: float) -> Any | No
     last: Exception | None = None
     for attempt in range(len(RETRY_BACKOFF_SECONDS) + 1):
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310 - https enforced above
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             if error.code == 404:

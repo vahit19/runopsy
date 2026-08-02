@@ -17,7 +17,7 @@ from pathlib import Path
 from runopsy_core import AnalysisContext, diagnose
 from runopsy_core.detectors import default_registry
 from runopsy_core.ranking import rank_candidates
-from runopsy_core.schema import DiagnosisBundle, FailureSignal
+from runopsy_core.schema import DiagnosisBundle, FailureSignal, NodeKind
 from runopsy_semantic.budget import Budget, Ledger
 from runopsy_semantic.cache import VerdictCache
 from runopsy_semantic.evaluator import SemanticVerdict, review_span, to_signal
@@ -34,6 +34,42 @@ becomes a candidate, and that is precisely the class this layer exists to catch.
 engine can point at a failure but at nothing upstream that explains it, the steps just
 before it are the only place an explanation could be.
 """
+
+
+_CONTAINER_KINDS = frozenset({NodeKind.RUN, NodeKind.AGENT})
+"""Nodes that are not steps, so cannot be a place to look."""
+
+
+def _ended_in_failure(context: AnalysisContext) -> bool:
+    """Whether the run reported that it failed."""
+    from runopsy_core.schema import RunEndEvent, RunOutcome
+
+    ended = next((event for event in context.events if isinstance(event, RunEndEvent)), None)
+    return ended is not None and ended.run.outcome is RunOutcome.FAILURE
+
+
+def _unexplained_targets(context: AnalysisContext, limit: int) -> list[tuple[str, int]]:
+    """Where to look when a run failed and the deterministic layers found nothing.
+
+    This is the case worth paying for, and until now it was the one case hybrid mode
+    refused to run: no candidate meant an immediate return, so a user whose agent had
+    failed silently — nothing errored, nothing timed out, the answer was simply wrong —
+    asked for a model's opinion and was charged for nothing while being told the run was
+    clean. Measured on an external benchmark of annotated multi-agent failures, every
+    single case is that shape.
+
+    The search starts at the end and walks back, because a failure that left no
+    structural trace is most likely to be legible where its consequences are: the last
+    thing the run did before it stopped. Nothing here claims that is *where* it went
+    wrong — the model is asked, the answer arrives as an ordinary semantic signal, and
+    it is capped below certainty like every other unvalidated finding.
+    """
+    steps = [
+        node
+        for node in sorted(context.graph.nodes, key=lambda node: node.sequence)
+        if node.kind not in _CONTAINER_KINDS
+    ]
+    return [(node.node_id, node.sequence) for node in steps[-limit:]]
 
 
 def _review_targets(
@@ -103,7 +139,13 @@ def review_diagnosis(
     deterministic = registry.run(context)
     bundle = diagnose(context, registry=registry)
 
-    if ledger.budget.disabled or not bundle.candidates:
+    if ledger.budget.disabled:
+        return HybridResult(bundle=bundle, ledger=ledger)
+
+    if not bundle.candidates and not _ended_in_failure(context):
+        # Nothing detected and nothing reported wrong: there is no question to ask, and
+        # asking one anyway would spend a user's money to be told a healthy run is
+        # healthy.
         return HybridResult(bundle=bundle, ledger=ledger)
 
     cache = VerdictCache(cache_dir) if cache_dir is not None else None
@@ -112,7 +154,12 @@ def review_diagnosis(
     extra: list[FailureSignal] = []
     withheld: set[str] = set()
 
-    for node_id, sequence in _review_targets(bundle, positions, max_candidates):
+    targets = (
+        _review_targets(bundle, positions, max_candidates)
+        if bundle.candidates
+        else _unexplained_targets(context, max_candidates)
+    )
+    for node_id, sequence in targets:
         window = window_around(context.events, sequence)
         if not window:
             continue
