@@ -132,7 +132,7 @@ lists propagation separately under *may reach* with its confidence.
 And an optional 3D view of the same run, where depth is time and height is severity:
 
 <p align="center">
-  <img src="docs/images/ui-3d.png" alt="The 3D view: a 56-step agent run seen from above, the yellow suspected onset near the start and the red observed failure at the end" width="880">
+  <img src="docs/images/ui-3d.png" alt="The 3D view: the same run as a road of blocks, flat where nothing was found, with a tall amber pillar at the suspected onset (step 9) and a red one at the visible failure (step 14)" width="880">
 </p>
 
 That is a real 56-step agent session. Trouble starts at the yellow block near the

@@ -20,6 +20,9 @@ import type { Candidate, GraphResponse, TraceNode } from "./api";
 import { useSelection } from "./store";
 
 const STEP_SPACING = 1.4;
+const CROWDED_RUN = 30;
+// Above this many steps the blocks are too small to read individually, and saying so
+// under a picture where they plainly are readable is worse than saying nothing.
 
 type Role = "onset" | "failure" | "affected" | "candidate" | "plain";
 
@@ -232,8 +235,11 @@ export default function FailureMap3D({
         </p>
         <p className="gloss">
           A translucent arc is inference — what the onset <i>may</i> have reached — never
-          something observed. For a run this long the 2D map is easier to read; this view
-          is here for the shape of a run, not for reading individual steps.
+          something observed.
+          {ordered.length > CROWDED_RUN
+            ? " At this length the blocks are too small to read one by one, so the 2D map" +
+              " is the better view; this one is here for the shape of the run."
+            : " Click the 2D map for the detail behind any step."}
         </p>
       </div>
     </div>
