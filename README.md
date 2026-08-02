@@ -135,12 +135,13 @@ And an optional 3D view of the same run, where depth is time and height is sever
   <img src="docs/images/ui-3d.png" alt="The 3D view: the same run as a road of blocks, flat where nothing was found, with a tall amber pillar at the suspected onset (step 9) and a red one at the visible failure (step 14)" width="880">
 </p>
 
-That is a real 56-step agent session. Trouble starts at the yellow block near the
-beginning and surfaces as the red one fifty steps later — which is the whole argument in
-one picture. Recorded steps are solid; inference is a translucent arc that fades with
+A healthy run is a flat road. Here the tall amber pillar is step 9, where the config was
+written wrongly, and the red one is step 14, where the test finally failed — five steps
+and one whole debugging session apart. That gap is the entire argument, in one picture.
+Recorded steps are solid geometry; inference is a translucent arc that fades with
 confidence, because a guess must not look more convincing for having perspective.
 
-Both screenshots are taken by [`scripts/render_ui.mjs`](scripts/render_ui.mjs) driving a
+Both screenshots are taken by [`packages/runopsy-ui/scripts/render_ui.mjs`](packages/runopsy-ui/scripts/render_ui.mjs) driving a
 real browser against a real recorded run, for the same reason the terminal images are
 rendered from real output.
 
