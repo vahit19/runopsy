@@ -6,7 +6,7 @@ How to pick this project up on another machine, and what is true about it today.
 operational companion: where things live, what exists *outside* the repository, and what
 was learned the hard way. Read both.
 
-**Last updated: 3 August 2026, at `v0.1.8`.**
+**Last updated: 3 August 2026, at `v0.1.9`.**
 
 ---
 
@@ -23,8 +23,8 @@ optional thing, `--mode hybrid`.
 
 | what | where |
 | --- | --- |
-| Source | https://github.com/vahit19/runopsy — `main`, tagged `v0.1.8` |
-| PyPI | https://pypi.org/project/runopsy/ — 10 distributions, all at 0.1.8 |
+| Source | https://github.com/vahit19/runopsy — `main`, tagged `v0.1.9` |
+| PyPI | https://pypi.org/project/runopsy/ — 10 distributions, all at 0.1.9 |
 | Hugging Face | https://huggingface.co/datasets/renderfy/runopsy-bench |
 | HF account | `renderfy` |
 | Local repo | `C:\Users\vahit.feryad\Documents\GenAI\misc\uygulamalar\runopsy_codebase` |
@@ -197,6 +197,12 @@ uv publish /tmp/dist/<pkg>-X.Y.Z*      # in dependency order, core first, meta l
 
 Sibling packages are pinned exactly (`runopsy-core==X.Y.Z`), so every manifest moves
 together. `tests/test_packaging.py` enforces that and fails on a stale pin.
+
+**Publish the README before the release, not after.** 0.1.8 shipped with the previous
+README, so the PyPI project page — the first thing a new user reads — still described the
+four-step setup `runopsy init` had just replaced. PyPI refuses a second upload of a
+version, so correcting the page cost an entire release (0.1.9). The project description
+comes from the uploaded metadata, not from GitHub.
 
 **PyPI's index lags.** After uploading, `uv pip install` may report the version
 unsatisfiable for a few minutes even though `pypi.org/simple/` already lists it. Retry
