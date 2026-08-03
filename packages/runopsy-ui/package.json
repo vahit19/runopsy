@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "screenshots": "node scripts/render_ui.mjs"
+    "screenshots": "node scripts/render_ui.mjs",
+    "overview": "node scripts/render_overview.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "^8.18.0",

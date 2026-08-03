@@ -1,0 +1,350 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Runopsy — end-to-end overview</title>
+<style>
+  @page { size: A4; margin: 14mm 15mm; }
+  * { box-sizing: border-box; }
+  body {
+    font: 10pt/1.45 "Segoe UI", system-ui, sans-serif;
+    color: #1c1f26; margin: 0;
+  }
+  h1 { font-size: 20pt; margin: 0 0 2mm; letter-spacing: -.3px; }
+  h1 + .sub { color: #5a6472; font-size: 10.5pt; margin: 0 0 6mm; }
+  h2 {
+    font-size: 12pt; margin: 7mm 0 2.5mm; padding-bottom: 1.2mm;
+    border-bottom: 1.5px solid #1c1f26;
+  }
+  h3 { font-size: 10pt; margin: 4mm 0 1.5mm; color: #2c3340; }
+  p { margin: 0 0 2.5mm; }
+  .lede { font-size: 10.5pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 3mm; font-size: 8.7pt; }
+  th { text-align: left; font-weight: 600; border-bottom: 1px solid #99a2b0; padding: 1.4mm 2mm 1.4mm 0; }
+  td { padding: 1.3mm 2mm 1.3mm 0; border-bottom: 1px solid #e6e9ee; vertical-align: top; }
+  td:first-child, th:first-child { white-space: nowrap; padding-right: 4mm; }
+  code, .mono {
+    font-family: Consolas, "Courier New", monospace; font-size: 8.3pt;
+    background: #f0f2f6; padding: 0 .8mm; border-radius: .7mm;
+  }
+  .num { text-align: right; white-space: nowrap; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 3mm 0 4mm; }
+  .step {
+    flex: 1; border: 1.2px solid #1c1f26; border-radius: 2mm; padding: 2mm 2.4mm;
+    font-size: 8.3pt; position: relative;
+  }
+  .step b { display: block; font-size: 8.8pt; margin-bottom: .8mm; }
+  .step small { color: #5a6472; }
+  .arrow { align-self: center; padding: 0 1.6mm; color: #99a2b0; font-size: 12pt; }
+  .layers { margin: 2mm 0 3mm; }
+  .layer {
+    display: flex; gap: 3mm; padding: 1.6mm 0; border-bottom: 1px solid #e6e9ee; font-size: 8.7pt;
+  }
+  .layer .tag {
+    flex: 0 0 19mm; font-weight: 600; color: #2c3340;
+  }
+  .free { color: #1a7f4b; font-weight: 600; }
+  .paid { color: #b06a00; font-weight: 600; }
+  .note {
+    background: #f4f6f9; border-left: 2.5px solid #99a2b0; padding: 2mm 3mm;
+    margin: 3mm 0; font-size: 8.8pt;
+  }
+  .note b { color: #1c1f26; }
+  .two { display: flex; gap: 6mm; }
+  .two > div { flex: 1; }
+  .foot { margin-top: 5mm; color: #7b8494; font-size: 8pt; border-top: 1px solid #e6e9ee; padding-top: 2mm; }
+  .kv { font-size: 8.7pt; }
+  .kv b { font-weight: 600; }
+  ul { margin: 0 0 2.5mm; padding-left: 4.5mm; }
+  li { margin-bottom: 1.1mm; font-size: 9pt; }
+</style>
+
+<!-- ─────────────────────────── PAGE 1 ─────────────────────────── -->
+<section class="page">
+  <h1>Runopsy</h1>
+  <p class="sub">Causal failure analysis for AI agent runs — an end-to-end overview.</p>
+
+  <p class="lede"><b>What it is.</b> A local-first command-line tool that records what an
+  AI agent did, then works out <i>where the run started going wrong</i> — not where it
+  stopped — and shows the evidence for that claim. It can then re-run the trace with one
+  thing changed to test whether the claim holds.</p>
+
+  <h2>The problem it exists for</h2>
+  <p>When an agent run fails, the last error is rarely the problem. An agent writes a
+  config for the wrong environment at step 9; nothing complains. Five steps later a test
+  fails because it cannot reach the endpoint. You read the log bottom-up, see the failing
+  test, and spend an hour on the test.</p>
+  <p>The failure was at step 9. The symptom was at step 14. Everything between them was
+  successful, so nothing in the log points backwards.</p>
+
+  <div class="note">
+    <b>Measured:</b> blaming the last failing step — which is what reading a log
+    bottom-up achieves — identifies the true onset <b>22.2%</b> of the time on a labelled
+    suite. Runopsy's deterministic engine: <b>94.4%</b>.
+  </div>
+
+  <h2>The gap in the market</h2>
+  <table>
+    <tr><th>Category</th><th>What it gives you</th><th>What it does not answer</th></tr>
+    <tr><td>Tracing &amp; observability<br><small>Phoenix, Langfuse, LangSmith</small></td>
+        <td>Every span, every token, searchable and pretty</td>
+        <td>Which span <i>started</i> the failure. It shows you everything and ranks
+        nothing.</td></tr>
+    <tr><td>Evaluation harnesses<br><small>Inspect AI, SWE-bench</small></td>
+        <td>Did the run pass or fail, at scale</td>
+        <td>Why it failed, and where. A score is a verdict on the outcome, not on the
+        trajectory.</td></tr>
+    <tr><td>Agent frameworks<br><small>Hermes, LangGraph, CrewAI</small></td>
+        <td>The run itself, plus logs</td>
+        <td>Anything after the run. Diagnosis is left to the human reading the log.</td></tr>
+    <tr><td><b>Runopsy</b></td>
+        <td>A ranked <i>onset</i> with evidence, propagation, and a replay that tests it</td>
+        <td>It is not a chat assistant and writes no code.</td></tr>
+  </table>
+
+  <p>The distinguishing move is not the visualisation, which anyone could rebuild. It is
+  that Runopsy will <b>try to prove itself wrong</b>: <code>runopsy replay --execute</code>
+  re-runs the trace in a disposable sandbox with one intervention at the suspected onset,
+  and only upgrades a suspicion to a cause when the downstream failures actually disappear.</p>
+
+  <h2>Three rules the design cannot break</h2>
+  <ul>
+    <li><b>Local-first.</b> Traces, state and artifacts stay on your machine. Nothing
+    reaches a provider without explicit opt-in.</li>
+    <li><b>Deterministic-first.</b> The core analysis spends zero tokens and makes zero
+    network calls. A model is optional and budget-capped.</li>
+    <li><b>Calibrated language.</b> A finding stays <i>suspected onset</i> until a replay
+    or a named human says otherwise. "Definitive root cause" is not available.</li>
+  </ul>
+
+  <div class="foot">Runopsy 0.1.7 · Apache-2.0 · github.com/vahit19/runopsy · pip install runopsy</div>
+</section>
+
+<!-- ─────────────────────────── PAGE 2 ─────────────────────────── -->
+<section class="page">
+  <h2>How it works: the chain, end to end</h2>
+
+  <div class="flow">
+    <div class="step"><b>1 · Capture</b><small>A runtime adapter hooks the agent. One
+      <code>runopsy hook</code> process per event.</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>2 · Normalize</b><small>Runtime events become a typed graph:
+      nodes and edges, OpenInference-compatible.</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>3 · Detect</b><small>15 detectors read the graph and emit
+      <i>signals</i>: failures, loops, state conflicts.</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>4 · Rank</b><small>Signals become ordered <i>candidates</i>,
+      scored by severity, precedence, impact.</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>5 · Validate</b><small>A sandboxed replay with one intervention
+      tests the top candidate.</small></div>
+  </div>
+
+  <h3>Storage: two halves, on purpose</h3>
+  <p class="kv"><b>JSONL journal</b> — append-only, one file per run, <i>authoritative</i>.
+  Written first and sealed with a rolling digest as it goes.
+  &nbsp;·&nbsp; <b>DuckDB index</b> — derived, queryable, rebuildable from the journal.
+  Reading reconciles the two.</p>
+  <p class="kv">Why: DuckDB admits one writing process. An agent with parallel subagents
+  fires several hooks at once, so index writes are lost as a matter of course. The journal
+  must survive that alone — and does.</p>
+
+  <h3>The five analysis layers</h3>
+  <div class="layers">
+    <div class="layer"><span class="tag">L0 structural</span>
+      <span>Facts the runtime already reported: exit codes, statuses, timeouts, missing
+      events. Nothing is interpreted, so nothing can be wrong about meaning.
+      <span class="free">zero tokens</span></span></div>
+    <div class="layer"><span class="tag">L1 behavioral</span>
+      <span>Patterns across steps: unproductive loops, retry storms, state that keeps
+      flipping back. <span class="free">zero tokens</span></span></div>
+    <div class="layer"><span class="tag">L2 graph impact</span>
+      <span>What the onset could have reached — reachability forward in time only, drawn
+      as inference, never as record. <span class="free">zero tokens</span></span></div>
+    <div class="layer"><span class="tag">L3 semantic</span>
+      <span>A model reads the few steps already found suspicious. Opt-in, budget-capped,
+      cannot raise a status. <span class="paid">costs money</span></span></div>
+    <div class="layer"><span class="tag">L4 validation</span>
+      <span>Counterfactual replay, or a named human. The only thing that can call
+      something a cause. <span class="free">sandboxed</span></span></div>
+  </div>
+
+  <h3>The three statuses, which are never collapsed</h3>
+  <table>
+    <tr><th>Status</th><th>Means</th><th>Confidence</th></tr>
+    <tr><td>observed failure</td><td>What the run visibly got wrong. A fact.</td><td>—</td></tr>
+    <tr><td>suspected onset</td><td>Where it may have started. Correlation and ordering.</td><td>capped below 0.75</td></tr>
+    <tr><td>replay-supported</td><td>Changing it made the downstream failures disappear.</td><td>up to 0.9</td></tr>
+  </table>
+
+  <div class="note">
+    Temporal order plus correlation is <b>not</b> causal proof, and the output never
+    says it is. A guard in the code (<code>asserts_causation</code>) fails the build if
+    any output path claims causation for an unvalidated finding.
+  </div>
+
+  <div class="foot">Page 2 — architecture</div>
+</section>
+
+<!-- ─────────────────────────── PAGE 3 ─────────────────────────── -->
+<section class="page">
+  <h2>Using it</h2>
+
+  <div class="flow">
+    <div class="step"><b>Attach</b><small><code>runopsy adapter hermes</code> — paste the
+      hook block. Or wrap anything: <code>runopsy record -s "make" -s "pytest"</code>.</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Run</b><small>Work normally. Recording is passive and never
+      breaks the run it observes.</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Diagnose</b><small><code>runopsy diagnose latest</code> — onset,
+      evidence, propagation.</small></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Test it</b><small><code>runopsy replay --from-step N --execute</code>
+      — sandbox, one intervention.</small></div>
+  </div>
+
+  <h3>Three ways in</h3>
+  <table>
+    <tr><th>You already have</th><th>Runopsy adds</th></tr>
+    <tr><td>an agent (Hermes today)</td><td><code>runopsy run "task"</code> drives it and diagnoses the session</td></tr>
+    <tr><td>a pipeline or test suite</td><td><code>runopsy record -s "make" -s "pytest"</code> wraps it</td></tr>
+    <tr><td>Inspect AI eval logs</td><td><code>runopsy-inspect import</code> reads them into traces</td></tr>
+  </table>
+
+  <h3>The commands that matter</h3>
+  <table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td><code>demo</code></td><td>A worked example, no setup, no key. Start here.</td></tr>
+    <tr><td><code>record</code> / <code>run</code></td><td>Wrap a pipeline, or drive an agent and diagnose it in one step.</td></tr>
+    <tr><td><code>diagnose</code></td><td>Observed failure, suspected onset, what it may have reached. <code>--mode hybrid</code> adds the paid layer.</td></tr>
+    <tr><td><code>evidence --step N</code></td><td>The command, its output, the repository changes, and why the step ranked where it did.</td></tr>
+    <tr><td><code>replay --from-step N</code></td><td>Plans a controlled re-run; <code>--execute</code> tests it in a sandbox.</td></tr>
+    <tr><td><code>verify</code></td><td>Whether a trace is byte-for-byte the one recorded. Tamper evidence, not tamper proofing.</td></tr>
+    <tr><td><code>graph</code> / <code>export</code> / <code>ui</code></td><td>ASCII timeline · self-contained HTML report or OTLP · browser view, loopback only.</td></tr>
+    <tr><td><code>bench</code></td><td>Score the engine: synthetic suite, fault injection, or an external labelled corpus.</td></tr>
+    <tr><td><code>doctor</code> / <code>setup</code> / <code>config</code></td><td>Store health and credentials · key into the OS keyring · <code>runopsy.toml</code>.</td></tr>
+  </table>
+
+  <h3>What it will not do</h3>
+  <ul>
+    <li>Claim a cause it has not validated.</li>
+    <li>Send anything anywhere without <code>--mode hybrid</code>.</li>
+    <li>Execute a replay outside a disposable sandbox, or perform a blocked side effect —
+    an unrecognised tool needs human approval, failing closed.</li>
+    <li>Report a finding on a healthy run. The false-positive rate is exactly zero.</li>
+  </ul>
+
+  <div class="foot">Page 3 — usage</div>
+</section>
+
+<!-- ─────────────────────────── PAGE 4 ─────────────────────────── -->
+<section class="page">
+  <h2>The stack, and why each piece is there</h2>
+
+  <h3>Core libraries</h3>
+  <table>
+    <tr><th>Tool</th><th>What it is</th><th>Why here</th></tr>
+    <tr><td>Python 3.12</td><td>Language</td><td>Pattern matching and modern typing; the agent ecosystem lives here.</td></tr>
+    <tr><td>Pydantic v2</td><td>Typed models with validation</td><td>The trace schema. A malformed event is rejected at the boundary, not three layers deep.</td></tr>
+    <tr><td>DuckDB</td><td>Embedded analytical database</td><td>SQL over runs and steps with no server. Derived data — deletable and rebuildable.</td></tr>
+    <tr><td>Typer</td><td>CLI framework</td><td>The command surface, with help text generated from the same signatures.</td></tr>
+    <tr><td>Rich</td><td>Terminal rendering</td><td>Tables, colour and layout for the diagnosis view.</td></tr>
+    <tr><td>NetworkX</td><td>Graph algorithms</td><td>Reachability and centrality over the trace graph, for the impact layer.</td></tr>
+    <tr><td>orjson</td><td>Fast JSON</td><td>Journal serialization, with sorted keys so a run always hashes identically.</td></tr>
+    <tr><td>httpx</td><td>HTTP client</td><td>The one network call in the product: the optional semantic layer.</td></tr>
+    <tr><td>FastAPI + Uvicorn</td><td>Web framework and server</td><td>The loopback API behind <code>runopsy ui</code>.</td></tr>
+    <tr><td>OpenInference / OTel</td><td>Tracing conventions</td><td>Export shape, so a diagnosed run opens in Phoenix or Langfuse.</td></tr>
+    <tr><td>keyring</td><td>OS credential store</td><td>A provider key belongs in Credential Manager or Keychain, not a file.</td></tr>
+  </table>
+
+  <h3>Web view</h3>
+  <p class="kv"><b>React + TypeScript + Vite</b> — the UI and its build.
+  &nbsp;·&nbsp; <b>XYFlow</b> — the 2D causal map; solid edges are recorded, dashed are inference.
+  &nbsp;·&nbsp; <b>Three.js / React Three Fiber</b> — the optional 3D view, lazy-loaded so nobody
+  who ignores the toggle downloads it. &nbsp;·&nbsp; <b>Zustand, TanStack Query</b> — state and fetching.</p>
+
+  <h3>Quality gate — every one of these must pass to release</h3>
+  <table>
+    <tr><th>Tool</th><th>Guards against</th></tr>
+    <tr><td>pytest + Hypothesis</td><td>Regressions; property-based tests on the graph and schema.</td></tr>
+    <tr><td>Ruff</td><td>Lint and format, one tool, no debate.</td></tr>
+    <tr><td>mypy</td><td>Type errors across all ten packages, named explicitly so the list cannot narrow silently.</td></tr>
+    <tr><td>Bandit + Semgrep</td><td>Unsafe subprocess use, injection, hardcoded credentials.</td></tr>
+    <tr><td>uv + hatchling</td><td>Reproducible resolution and wheel builds.</td></tr>
+    <tr><td>GitHub Actions</td><td>The whole gate on three platforms, before anything is published.</td></tr>
+  </table>
+
+  <h3>The eleven packages</h3>
+  <p class="kv"><code>runopsy</code> is the meta-distribution <code>pip install runopsy</code>
+  resolves to. Below it, so a library user can depend on one piece:
+  <b>core</b> (schema, detectors, ranking — needs only Pydantic) ·
+  <b>collector</b> (journals, index, vault, retention) ·
+  <b>cli</b> · <b>replay</b> (checkpoint restore, counterfactual execution) ·
+  <b>bench</b> (cases, metrics, fault injection, external benchmarks) ·
+  <b>adapter</b> (shell + Hermes) · <b>semantic</b> (the paid layer) ·
+  <b>server</b> (API + web view) · <b>ui</b> (React) · <b>inspect</b> (Inspect AI logs).</p>
+  <p class="kv"><code>runopsy-core</code> never imports runtime-specific code — it accepts
+  only the normalized graph. That is what makes a second runtime adapter possible.</p>
+
+  <div class="foot">Page 4 — stack</div>
+</section>
+
+<!-- ─────────────────────────── PAGE 5 ─────────────────────────── -->
+<section class="page">
+  <h2>What "tested" means here</h2>
+
+  <h3>The test suite — 916 tests</h3>
+  <table>
+    <tr><th>Kind</th><th>What it checks</th></tr>
+    <tr><td>Unit &amp; property</td><td>Schema, detectors, ranking, impact. Hypothesis generates graphs the author would not have thought of.</td></tr>
+    <tr><td>Integration</td><td>Real shell commands, real exit codes, real timing — recorded through the same adapter a user gets.</td></tr>
+    <tr><td>Real git repositories</td><td>Repository capture and checkpoint restore run against an actual <code>git</code>, not a stub. A fake that agrees with the parser proves only that one person wrote both.</td></tr>
+    <tr><td>Concurrency</td><td>32 real subprocesses against one store. The defect it pins was invisible in-process.</td></tr>
+    <tr><td>Wording</td><td>That no output path claims causation for an unvalidated finding. Treated as a defect of the same rank as a crash.</td></tr>
+    <tr><td>Packaging</td><td>That the CI list, the docs and the published metadata have not fallen behind the code.</td></tr>
+  </table>
+
+  <h3>The four measurements — including the ones that go badly</h3>
+  <table>
+    <tr><th>Benchmark</th><th>What it measures</th><th class="num">Onset top-1</th></tr>
+    <tr><td>Runopsy-Bench (20 synthetic)</td><td>Does the ranking behave as designed</td><td class="num"><b>94.4%</b></td></tr>
+    <tr><td><i>— baseline: blame the last failure</i></td><td><i>What reading a log achieves</i></td><td class="num">22.2%</td></tr>
+    <tr><td>Fault injection into a <b>real recorded run</b></td><td>Can it find a known break in a real trace</td><td class="num"><b>100%</b></td></tr>
+    <tr><td>TRAIL — expert-labelled SWE-Bench traces</td><td>Does it agree with human experts on real coding agents</td><td class="num"><b>0.0%</b></td></tr>
+    <tr><td>Who&amp;When — expert-labelled multi-agent</td><td>The same, on conversation traces</td><td class="num"><b>0.0%</b></td></tr>
+  </table>
+
+  <div class="note">
+    <b>Why the last two are published.</b> Runopsy localizes onsets that <i>were themselves
+    failures</i> — a step that errored before the visible symptom did. On TRAIL, not one of
+    the 30 annotated onsets carries an error status of any kind: they are formatting
+    mistakes, instruction non-compliance, a wrong assumption about a file path. The
+    deterministic layers read exit codes, so they are blind to those by construction. The
+    94.4% and the 0.0% describe the same engine on different kinds of failure, and a page
+    carrying only the first would be selling rather than measuring.
+  </div>
+
+  <h3>Honest limits, as of version 0.1.7</h3>
+  <ul>
+    <li><b>Seven of fifteen detectors</b> have fired on a real recorded run. Three cannot
+    fire on one at all — they need fields or event kinds no current adapter produces.</li>
+    <li><b>One live runtime adapter.</b> The architecture is runtime-agnostic; only Hermes
+    proves it so far.</li>
+    <li><b>No corpus of our own.</b> <code>runopsy label</code> exists; the corpus is
+    empty. Filling it needs a person reading real failures — doing it from inside the
+    project would grade the engine against its own opinion.</li>
+    <li><b>Semantic localization is unmeasured.</b> The layer that could answer TRAIL has
+    not been scored on it.</li>
+  </ul>
+
+  <h3>Where it goes next</h3>
+  <p class="kv">1. Record more real runs — every headline number except the injection one
+  still comes from traces the project wrote itself. &nbsp;2. Score the semantic layer on
+  TRAIL, the case the deterministic engine misses by design. &nbsp;3. Give
+  <code>retry_storm</code> something real to fire on, or remove it. &nbsp;4. A second live
+  runtime adapter.</p>
+
+  <div class="foot">Page 5 — evidence and limits · Built by Vahit Feryad · ORCID 0000-0002-3282-339X</div>
+</section>
