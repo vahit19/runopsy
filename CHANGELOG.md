@@ -5,6 +5,40 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.8] — 2026-08-03
+
+### Added
+
+- `runopsy init` wires a runtime end to end in one command: it writes the hook block into
+  Hermes' config, installs and enables the plugin that carries token usage, and then
+  checks that the runtime really is wired. The check is the point — a half-configured
+  setup records nothing while every session looks completely normal.
+- `runopsy adapter hermes install` performs the config edit on its own. Printing a block
+  to paste stays the default, because editing another tool's config unasked is how an
+  integration becomes undebuggable, but the paste is the step that loses a newcomer and
+  it has a failure mode that looks like success.
+- A `hermes` extra, so `pip install 'runopsy[hermes]'` brings the supported agent along.
+  It is an extra and never a dependency: requiring a particular runtime is exactly what
+  the engine is built not to do.
+
+### Fixed
+
+- The install command printed in error output was unquoted, so it failed on macOS before
+  reaching pip — square brackets are glob characters in zsh. A first-contact error that
+  looks like the package does not exist.
+
+### Notes
+
+- Writing another tool's config is opt-in and reversible: a config that will not parse is
+  refused rather than overwritten, the previous contents are copied aside, and when there
+  is no `hooks:` section the block is appended as text so comments and formatting
+  elsewhere survive byte-for-byte. Only a genuine merge round-trips through the parser.
+- Per-step recording overhead was measured rather than assumed: ~3.6s per event on the
+  development machine, of which only 642ms is import a recorder does not need. The rest
+  is interpreter startup and schema construction, which a subprocess per event cannot
+  avoid. Making `runopsy_bench` lazy was tried, measured at noise, and reverted. The
+  remedy is batching or a resident recorder — a design change, not a setting.
+
 ## [0.1.7] — 2026-08-03
 
 **Fixed — the PyPI page was a stub.** Somebody went looking for a project page like

@@ -1,6 +1,6 @@
 [project]
 name = "runopsy-inspect"
-version = "0.1.7"
+version = "0.1.8"
 description = "Read Inspect AI eval logs into Runopsy traces"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,9 +21,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core==0.1.7",
-    "runopsy-adapter==0.1.7",
-    "runopsy-collector==0.1.7",
+    "runopsy-core==0.1.8",
+    "runopsy-adapter==0.1.8",
+    "runopsy-collector==0.1.8",
     "typer>=0.12",
     # Upper bound deliberate. inspect-ai 0.3.240 and later cap click below 8.2.2, which
     # is inside the range carrying PYSEC-2026-2132 (command injection in click.edit()).

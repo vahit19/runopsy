@@ -17,7 +17,7 @@ from runopsy_core.ranking import MAX_UNVALIDATED_CONFIDENCE, RankingWeights, ran
 from runopsy_core.schema import SCHEMA_VERSION
 from runopsy_core.validate import REPLAY_SUPPORTED_CONFIDENCE, ReplayEvidence, apply_replay_evidence
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 __all__ = [
     "MAX_UNVALIDATED_CONFIDENCE",

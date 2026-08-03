@@ -46,7 +46,7 @@ from runopsy_bench.performance import (
 )
 from runopsy_bench.report import comparison_markdown
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 __all__ = [
     "CORPUS_VERSION",
