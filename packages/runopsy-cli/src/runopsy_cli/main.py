@@ -586,7 +586,7 @@ def init(
     if executable is None:
         errors.print(
             "No 'hermes' executable on PATH.\n"
-            "  Install it together with Runopsy:  pip install runopsy[hermes]\n"
+            "  Install it together with Runopsy:  pip install 'runopsy[hermes]'\n"
             "  Or on its own:                     uv tool install hermes-agent\n"
             "Then run 'runopsy init' again.",
             style="red",
