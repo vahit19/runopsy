@@ -1,26 +1,20 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Runopsy — end-to-end overview</title>
+<title>Runopsy — from scratch</title>
 <style>
-  @page { size: A4; margin: 14mm 15mm; }
+  @page { size: A4; margin: 12mm 14mm; }
   * { box-sizing: border-box; }
-  body {
-    font: 10pt/1.45 "Segoe UI", system-ui, sans-serif;
-    color: #1c1f26; margin: 0;
-  }
-  h1 { font-size: 20pt; margin: 0 0 2mm; letter-spacing: -.3px; }
-  h1 + .sub { color: #5a6472; font-size: 10.5pt; margin: 0 0 6mm; }
-  h2 {
-    font-size: 12pt; margin: 7mm 0 2.5mm; padding-bottom: 1.2mm;
-    border-bottom: 1.5px solid #1c1f26;
-  }
-  h3 { font-size: 10pt; margin: 4mm 0 1.5mm; color: #2c3340; }
-  p { margin: 0 0 2.5mm; }
-  .lede { font-size: 10.5pt; }
-  table { width: 100%; border-collapse: collapse; margin: 2mm 0 3mm; font-size: 8.7pt; }
-  th { text-align: left; font-weight: 600; border-bottom: 1px solid #99a2b0; padding: 1.4mm 2mm 1.4mm 0; }
-  td { padding: 1.3mm 2mm 1.3mm 0; border-bottom: 1px solid #e6e9ee; vertical-align: top; }
-  td:first-child, th:first-child { white-space: nowrap; padding-right: 4mm; }
+  body { font: 9.2pt/1.38 "Segoe UI", system-ui, sans-serif; color: #1c1f26; margin: 0; }
+  h1 { font-size: 18pt; margin: 0 0 1.5mm; letter-spacing: -.3px; }
+  h1 + .sub { color: #5a6472; font-size: 9.8pt; margin: 0 0 4mm; }
+  h2 { font-size: 11pt; margin: 4.5mm 0 2mm; padding-bottom: 1.2mm; border-bottom: 1.5px solid #1c1f26; }
+  h3 { font-size: 9.4pt; margin: 3mm 0 1.2mm; color: #2c3340; }
+  p { margin: 0 0 2mm; }
+  .lede { font-size: 9.8pt; }
+  table { width: 100%; border-collapse: collapse; margin: 1.6mm 0 2.4mm; font-size: 8.2pt; }
+  th { text-align: left; font-weight: 600; border-bottom: 1px solid #99a2b0; padding: 1.1mm 2mm 1.1mm 0; }
+  td { padding: 1mm 2mm 1mm 0; border-bottom: 1px solid #e6e9ee; vertical-align: top; }
+  td:first-child, th:first-child { padding-right: 4mm; }
   code, .mono {
     font-family: Consolas, "Courier New", monospace; font-size: 8.3pt;
     background: #f0f2f6; padding: 0 .8mm; border-radius: .7mm;
@@ -28,323 +22,322 @@
   .num { text-align: right; white-space: nowrap; }
   .page { page-break-after: always; }
   .page:last-child { page-break-after: auto; }
-  .flow { display: flex; align-items: stretch; gap: 0; margin: 3mm 0 4mm; }
-  .step {
-    flex: 1; border: 1.2px solid #1c1f26; border-radius: 2mm; padding: 2mm 2.4mm;
-    font-size: 8.3pt; position: relative;
-  }
-  .step b { display: block; font-size: 8.8pt; margin-bottom: .8mm; }
+  .flow { display: flex; align-items: stretch; margin: 2.4mm 0 3mm; }
+  .step { flex: 1; border: 1.2px solid #1c1f26; border-radius: 2mm; padding: 1.6mm 2mm; font-size: 7.7pt; }
+  .step b { display: block; font-size: 8.7pt; margin-bottom: .8mm; }
   .step small { color: #5a6472; }
-  .arrow { align-self: center; padding: 0 1.6mm; color: #99a2b0; font-size: 12pt; }
-  .layers { margin: 2mm 0 3mm; }
-  .layer {
-    display: flex; gap: 3mm; padding: 1.6mm 0; border-bottom: 1px solid #e6e9ee; font-size: 8.7pt;
-  }
-  .layer .tag {
-    flex: 0 0 19mm; font-weight: 600; color: #2c3340;
-  }
+  .arrow { align-self: center; padding: 0 1.5mm; color: #99a2b0; font-size: 12pt; }
   .free { color: #1a7f4b; font-weight: 600; }
   .paid { color: #b06a00; font-weight: 600; }
-  .note {
-    background: #f4f6f9; border-left: 2.5px solid #99a2b0; padding: 2mm 3mm;
-    margin: 3mm 0; font-size: 8.8pt;
+  .note { background: #f4f6f9; border-left: 2.5px solid #99a2b0; padding: 1.6mm 2.6mm; margin: 2.2mm 0; font-size: 8.3pt; }
+  .term { background: #fffaf0; border-left: 2.5px solid #d9a441; padding: 1.6mm 2.6mm; margin: 2.2mm 0; font-size: 8.2pt; }
+  .term b { color: #7a5410; }
+  .screen {
+    background: #1c1f26; color: #e8ecf2; font-family: Consolas, "Courier New", monospace;
+    font-size: 7.4pt; line-height: 1.42; padding: 2.4mm 3mm; border-radius: 2mm; margin: 2.5mm 0;
+    white-space: pre-wrap;
   }
-  .note b { color: #1c1f26; }
-  .two { display: flex; gap: 6mm; }
-  .two > div { flex: 1; }
-  .foot { margin-top: 5mm; color: #7b8494; font-size: 8pt; border-top: 1px solid #e6e9ee; padding-top: 2mm; }
-  .kv { font-size: 8.7pt; }
-  .kv b { font-weight: 600; }
+  .screen .r { color: #ff8a80; } .screen .y { color: #ffcc66; } .screen .g { color: #9fd68a; }
+  .screen .d { color: #8b95a5; }
+  .foot { margin-top: 3.5mm; color: #7b8494; font-size: 8pt; border-top: 1px solid #e6e9ee; padding-top: 2mm; }
+  .kv { font-size: 8.2pt; }
   ul { margin: 0 0 2.5mm; padding-left: 4.5mm; }
-  li { margin-bottom: 1.1mm; font-size: 9pt; }
+  li { margin-bottom: .9mm; font-size: 8.5pt; }
 </style>
 
-<!-- ─────────────────────────── PAGE 1 ─────────────────────────── -->
+<!-- ─────────── PAGE 1 ─────────── -->
 <section class="page">
   <h1>Runopsy</h1>
-  <p class="sub">Causal failure analysis for AI agent runs — an end-to-end overview.</p>
+  <p class="sub">For someone who has never heard of it.</p>
 
-  <p class="lede"><b>What it is.</b> A local-first command-line tool that records what an
-  AI agent did, then works out <i>where the run started going wrong</i> — not where it
-  stopped — and shows the evidence for that claim. It can then re-run the trace with one
-  thing changed to test whether the claim holds.</p>
+  <h2>First: what is going on out there?</h2>
+  <p class="lede">Some developers now hand their work to <b>AI agents</b>. An agent is a
+  program that carries out a task one move at a time: it reads files, writes code, runs
+  terminal commands, runs tests. We will call each of those moves a <b>step</b>, and the
+  whole thing from beginning to end a <b>run</b>.</p>
+  <p>Sometimes the agent fails the task. What you are left with is a long log, and the
+  question "where did this go wrong?" to answer on your own.</p>
 
-  <h2>The problem it exists for</h2>
-  <p>When an agent run fails, the last error is rarely the problem. An agent writes a
-  config for the wrong environment at step 9; nothing complains. Five steps later a test
-  fails because it cannot reach the endpoint. You read the log bottom-up, see the failing
-  test, and spend an hour on the test.</p>
-  <p>The failure was at step 9. The symptom was at step 14. Everything between them was
-  successful, so nothing in the log points backwards.</p>
+  <h2>The problem: where a failure shows is not where it happened</h2>
+  <p>A real example. You tell the agent "fix that failing test." It runs 16 steps:</p>
+
+  <table>
+    <tr><th style="width:14mm">Step</th><th>What it did</th><th>Result</th></tr>
+    <tr><td>1–8</td><td>Read files, searched, planned</td><td>fine</td></tr>
+    <tr><td><b>9</b></td><td><b>Wrote a config file for the wrong environment</b></td><td><b>errored — and the agent carried on</b></td></tr>
+    <tr><td>10–13</td><td>Edited code, restarted the service, checked it</td><td>all succeeded</td></tr>
+    <tr><td><b>14</b></td><td>Ran the test</td><td><b>failed</b></td></tr>
+  </table>
+
+  <p>You read the log <b>bottom-up</b> — everybody does — and you see step 14, the failing
+  test. You spend an hour on that test.</p>
+  <p><b>But the fault was at step 9.</b> The agent wrote the wrong address there, the next
+  four steps ran perfectly well, and the thing only blew up at step 14. Nothing in between
+  says "look here", because nothing in between failed.</p>
 
   <div class="note">
-    <b>Measured:</b> blaming the last failing step — which is what reading a log
-    bottom-up achieves — identifies the true onset <b>22.2%</b> of the time on a labelled
-    suite. Runopsy's deterministic engine: <b>94.4%</b>.
+    <b>How often does that mislead you?</b> We measured it on 20 labelled runs. "Blame the
+    last failing step" — reading the log bottom-up — finds the real beginning only
+    <b>22.2%</b> of the time. Four times in five, you are looking in the wrong place.
   </div>
 
-  <h2>The gap in the market</h2>
+  <h2>What Runopsy does</h2>
+  <p class="lede">It quietly records every step while the agent works. When the run ends it
+  reads that record and tells you <b>where things started going wrong</b> — not where they
+  blew up. Then it shows you the evidence, and if you want, it <i>tests</i> its own claim.
+  (The name is Run + Autopsy: an autopsy looks for the cause, not the moment of death.)</p>
+
+  <h2>Why don't existing tools answer this?</h2>
   <table>
-    <tr><th>Category</th><th>What it gives you</th><th>What it does not answer</th></tr>
-    <tr><td>Tracing &amp; observability<br><small>Phoenix, Langfuse, LangSmith</small></td>
-        <td>Every span, every token, searchable and pretty</td>
-        <td>Which span <i>started</i> the failure. It shows you everything and ranks
-        nothing.</td></tr>
-    <tr><td>Evaluation harnesses<br><small>Inspect AI, SWE-bench</small></td>
-        <td>Did the run pass or fail, at scale</td>
-        <td>Why it failed, and where. A score is a verdict on the outcome, not on the
-        trajectory.</td></tr>
-    <tr><td>Agent frameworks<br><small>Hermes, LangGraph, CrewAI</small></td>
-        <td>The run itself, plus logs</td>
-        <td>Anything after the run. Diagnosis is left to the human reading the log.</td></tr>
+    <tr><th style="width:40mm">What people use today</th><th>What it gives you</th><th>What it leaves unanswered</th></tr>
+    <tr><td><b>Observability tools</b><br><small>Dashboards that record and display every move an agent makes</small></td>
+        <td>Every step, every detail; searchable, well-drawn</td>
+        <td>Which step <i>started</i> the trouble. It shows all of them and marks none, so
+        reading the log is still your job.</td></tr>
+    <tr><td><b>Evaluation harnesses</b><br><small>Systems that test an agent across hundreds of tasks</small></td>
+        <td>Whether the agent passed or failed, in aggregate</td>
+        <td>Why it failed. A score grades the outcome; it doesn't say where along the way
+        it was lost.</td></tr>
+    <tr><td><b>Agent frameworks</b><br><small>The runtimes that execute the agent</small></td>
+        <td>The run itself, and its logs</td>
+        <td>Everything after the run. Diagnosis is left entirely to whoever reads the log.</td></tr>
     <tr><td><b>Runopsy</b></td>
-        <td>A ranked <i>onset</i> with evidence, propagation, and a replay that tests it</td>
-        <td>It is not a chat assistant and writes no code.</td></tr>
+        <td>A marked <b>onset step</b>, the evidence for it, the steps it reached, and an
+        experiment that tests the claim</td>
+        <td>It writes no code and holds no conversation. It doesn't replace your agent;
+        it attaches to it.</td></tr>
   </table>
 
-  <p>The distinguishing move is not the visualisation, which anyone could rebuild. It is
-  that Runopsy will <b>try to prove itself wrong</b>: <code>runopsy replay --execute</code>
-  re-runs the trace in a disposable sandbox with one intervention at the suspected onset,
-  and only upgrades a suspicion to a cause when the downstream failures actually disappear.</p>
+  <p>The real difference isn't the visuals — anyone can draw those. It is this:
+  <b>Runopsy tries to refute itself.</b> Having said "it broke at step 9", it re-runs the
+  run in a throwaway copy and <i>changes only step 9</i>. If the later failures really do
+  disappear, a suspicion is promoted to evidence. If they don't, it says so.</p>
 
-  <h2>Three rules the design cannot break</h2>
-  <ul>
-    <li><b>Local-first.</b> Traces, state and artifacts stay on your machine. Nothing
-    reaches a provider without explicit opt-in.</li>
-    <li><b>Deterministic-first.</b> The core analysis spends zero tokens and makes zero
-    network calls. A model is optional and budget-capped.</li>
-    <li><b>Calibrated language.</b> A finding stays <i>suspected onset</i> until a replay
-    or a named human says otherwise. "Definitive root cause" is not available.</li>
-  </ul>
-
-  <div class="foot">Runopsy 0.1.7 · Apache-2.0 · github.com/vahit19/runopsy · pip install runopsy</div>
+  <div class="foot">Runopsy 0.1.7 · Free and open source (Apache-2.0) · <code>pip install runopsy</code></div>
 </section>
 
-<!-- ─────────────────────────── PAGE 2 ─────────────────────────── -->
+<!-- ─────────── PAGE 2 ─────────── -->
 <section class="page">
-  <h2>How it works: the chain, end to end</h2>
+  <h2>What you actually see</h2>
+  <p>Installing is one line, and there is a worked example ready to run — no agent to set
+  up, no API key, no configuration:</p>
+  <div class="screen">pip install runopsy
+runopsy demo</div>
+
+  <p>What comes back is the real output for the story on page 1:</p>
+
+  <div class="screen"><span class="d">Run demo_run — fix the failing test in the payments service
+demo · 16 events · failed</span>
+
+<span class="r">Observed failure</span>  <span class="d">(what the run visibly got wrong)</span>
+  step 14 pytest
+  tool 'pytest' failed with exit code 1
+
+<span class="y">Suspected onset</span>  <span class="d">(where it may have started going wrong — unvalidated)</span>
+  step 9 write_config
+  tool 'write_config' failed with exit code 1
+  <span class="d">47% confidence, unvalidated
+  may have reached: step 10, step 11, step 12 and 2 more
+  for evidence: runopsy evidence demo_run --step 9</span>
+
+<span class="d">No cause has been validated yet. To test this candidate, replay from there:
+  runopsy replay demo_run --from-step 9</span></div>
+
+  <h3>Three separate things, and they are never conflated</h3>
+  <table>
+    <tr><th style="width:34mm">What it says</th><th>What it means</th><th>How much to trust it</th></tr>
+    <tr><td><b>Observed failure</b></td><td>What the run visibly got wrong. The test failed at step 14.</td><td>This is a <b>fact</b>. Not up for debate.</td></tr>
+    <tr><td><b>Suspected onset</b></td><td>Where it probably broke. Step 9.</td><td>A <b>guess</b>. Confidence can never exceed 75%.</td></tr>
+    <tr><td><b>Replay-supported</b></td><td>The experiment ran: changing that step made the later failures go away.</td><td>Now <b>evidenced</b>. Can rise to 90%.</td></tr>
+  </table>
+
+  <div class="term">
+    <b>Why does that distinction matter so much?</b> The easiest thing a diagnostic tool
+    can do is sound certain about something it isn't. Send someone confidently to the wrong
+    place once and nobody trusts it again. So Runopsy <i>offers no</i> "definitive root
+    cause" — until an experiment or a person says otherwise, it says "suspected".
+  </div>
+
+  <h3>Using it on your own work</h3>
+  <p>It is useful even with no agent at all. It can wrap whatever you already run:</p>
+  <div class="screen">runopsy record -s "make" -s "pytest"   <span class="d"># record your own commands</span>
+runopsy diagnose latest                 <span class="d"># where did it start going wrong</span>
+runopsy evidence latest --step 9        <span class="d"># exactly what happened at that step</span>
+runopsy ui                              <span class="d"># visual map in the browser</span></div>
+
+  <table>
+    <tr><th style="width:44mm">If you have this</th><th>Runopsy adds</th></tr>
+    <tr><td>An AI agent</td><td>Drives the agent and diagnoses the session in one command</td></tr>
+    <tr><td>A build or test pipeline</td><td>Wraps your commands, records them, diagnoses them</td></tr>
+    <tr><td>Nothing yet</td><td><code>runopsy demo</code> — the worked example, one command</td></tr>
+  </table>
+
+  <div class="foot">Page 2 — what you see, and how you use it</div>
+</section>
+
+<!-- ─────────── PAGE 3 ─────────── -->
+<section class="page">
+  <h2>What happens inside</h2>
+  <p>Five stages. Each takes the previous one's output:</p>
 
   <div class="flow">
-    <div class="step"><b>1 · Capture</b><small>A runtime adapter hooks the agent. One
-      <code>runopsy hook</code> process per event.</small></div>
+    <div class="step"><b>1 · Record</b><small>Every time the agent takes a step, a small
+      notice reaches Runopsy and lands on disk.</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>2 · Normalize</b><small>Runtime events become a typed graph:
-      nodes and edges, OpenInference-compatible.</small></div>
+    <div class="step"><b>2 · Normalize</b><small>Different agents' different log formats
+      become one common shape.</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>3 · Detect</b><small>15 detectors read the graph and emit
-      <i>signals</i>: failures, loops, state conflicts.</small></div>
+    <div class="step"><b>3 · Search</b><small>15 separate checks scan the record: failed
+      steps, futile loops, contradictory states.</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>4 · Rank</b><small>Signals become ordered <i>candidates</i>,
-      scored by severity, precedence, impact.</small></div>
+    <div class="step"><b>4 · Rank</b><small>Findings are scored: how serious, how early,
+      how much of what followed they touched.</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>5 · Validate</b><small>A sandboxed replay with one intervention
-      tests the top candidate.</small></div>
+    <div class="step"><b>5 · Test</b><small>The strongest candidate is re-run in a
+      throwaway copy with one thing changed.</small></div>
   </div>
 
-  <h3>Storage: two halves, on purpose</h3>
-  <p class="kv"><b>JSONL journal</b> — append-only, one file per run, <i>authoritative</i>.
-  Written first and sealed with a rolling digest as it goes.
-  &nbsp;·&nbsp; <b>DuckDB index</b> — derived, queryable, rebuildable from the journal.
-  Reading reconciles the two.</p>
-  <p class="kv">Why: DuckDB admits one writing process. An agent with parallel subagents
-  fires several hooks at once, so index writes are lost as a matter of course. The journal
-  must survive that alone — and does.</p>
-
-  <h3>The five analysis layers</h3>
-  <div class="layers">
-    <div class="layer"><span class="tag">L0 structural</span>
-      <span>Facts the runtime already reported: exit codes, statuses, timeouts, missing
-      events. Nothing is interpreted, so nothing can be wrong about meaning.
-      <span class="free">zero tokens</span></span></div>
-    <div class="layer"><span class="tag">L1 behavioral</span>
-      <span>Patterns across steps: unproductive loops, retry storms, state that keeps
-      flipping back. <span class="free">zero tokens</span></span></div>
-    <div class="layer"><span class="tag">L2 graph impact</span>
-      <span>What the onset could have reached — reachability forward in time only, drawn
-      as inference, never as record. <span class="free">zero tokens</span></span></div>
-    <div class="layer"><span class="tag">L3 semantic</span>
-      <span>A model reads the few steps already found suspicious. Opt-in, budget-capped,
-      cannot raise a status. <span class="paid">costs money</span></span></div>
-    <div class="layer"><span class="tag">L4 validation</span>
-      <span>Counterfactual replay, or a named human. The only thing that can call
-      something a cause. <span class="free">sandboxed</span></span></div>
+  <div class="term">
+    <b>Why does stage 2 exist?</b> Every agent logs in its own format. Runopsy converts
+    them all to one shape, so the analysis never has to know which agent it is looking at.
+    Supporting another agent tomorrow means writing one more translator, nothing else.
   </div>
 
-  <h3>The three statuses, which are never collapsed</h3>
+  <h3>Stage 3: what do those 15 checks look for?</h3>
+  <p class="kv">A sample: <b>did a step return an error code</b> · <b>is the agent running
+  the same command over and over to no effect</b> (it may be stuck) · <b>is it doing
+  something, undoing it, and doing it again</b> · <b>did a step time out</b> · <b>does a
+  run that claims success contain a failed step</b> · <b>was a configured budget
+  exceeded</b>.</p>
+
+  <h3>The questions come in five tiers</h3>
   <table>
-    <tr><th>Status</th><th>Means</th><th>Confidence</th></tr>
-    <tr><td>observed failure</td><td>What the run visibly got wrong. A fact.</td><td>—</td></tr>
-    <tr><td>suspected onset</td><td>Where it may have started. Correlation and ordering.</td><td>capped below 0.75</td></tr>
-    <tr><td>replay-supported</td><td>Changing it made the downstream failures disappear.</td><td>up to 0.9</td></tr>
+    <tr><th style="width:30mm">Tier</th><th>What it asks</th><th>Cost</th></tr>
+    <tr><td><b>Facts</b></td><td>What failed, what timed out, what is missing. No interpretation — only what the record says.</td><td class="free">free</td></tr>
+    <tr><td><b>Behaviour</b></td><td>Patterns across steps: futile loops, pointless repetition, work that keeps being undone.</td><td class="free">free</td></tr>
+    <tr><td><b>Reach</b></td><td>What this step may have affected afterwards. Forwards only — nothing can affect the past.</td><td class="free">free</td></tr>
+    <tr><td><b>Meaning</b></td><td>A language model reads the few steps <i>already flagged as suspicious</i>. Optional.</td><td class="paid">spends money</td></tr>
+    <tr><td><b>Experiment</b></td><td>A re-run in a throwaway copy with one intervention. The only tier that can say "because".</td><td class="free">free</td></tr>
   </table>
 
   <div class="note">
-    Temporal order plus correlation is <b>not</b> causal proof, and the output never
-    says it is. A guard in the code (<code>asserts_causation</code>) fails the build if
-    any output path claims causation for an unvalidated finding.
+    The first three tiers <b>spend nothing and touch no network</b> — the whole core
+    analysis finishes there. The language model is an optional extra that reads only the
+    few already-suspicious steps; it never ships a whole run to a provider. You set a
+    ceiling on what it may spend.
   </div>
 
-  <div class="foot">Page 2 — architecture</div>
+  <h3>Why is the record kept in two places?</h3>
+  <p class="kv">One is the <b>journal</b>: a plain text file only ever appended to — the
+  authoritative record. The other is the <b>index</b>: a database for fast queries,
+  entirely rebuildable from the journal.</p>
+  <p class="kv">The reason is practical: only one program at a time may write to the
+  database. When an agent splits work across parallel helpers, several records arrive at
+  once and the database turns some away. The journal has to survive that on its own — and
+  it does. It is also sealed as it is written, so <code>runopsy verify</code> can tell you
+  whether the record was altered afterwards.</p>
+
+  <div class="foot">Page 3 — the mechanism</div>
 </section>
 
-<!-- ─────────────────────────── PAGE 3 ─────────────────────────── -->
+<!-- ─────────── PAGE 4 ─────────── -->
 <section class="page">
-  <h2>Using it</h2>
+  <h2>What it is built from</h2>
+  <p>Each row: the name, <i>what kind of thing it is</i>, and why it is here.</p>
 
-  <div class="flow">
-    <div class="step"><b>Attach</b><small><code>runopsy adapter hermes</code> — paste the
-      hook block. Or wrap anything: <code>runopsy record -s "make" -s "pytest"</code>.</small></div>
-    <div class="arrow">→</div>
-    <div class="step"><b>Run</b><small>Work normally. Recording is passive and never
-      breaks the run it observes.</small></div>
-    <div class="arrow">→</div>
-    <div class="step"><b>Diagnose</b><small><code>runopsy diagnose latest</code> — onset,
-      evidence, propagation.</small></div>
-    <div class="arrow">→</div>
-    <div class="step"><b>Test it</b><small><code>runopsy replay --from-step N --execute</code>
-      — sandbox, one intervention.</small></div>
+  <table>
+    <tr><th style="width:26mm">Tool</th><th style="width:44mm">What it is</th><th>What it does here</th></tr>
+    <tr><td>Python 3.12</td><td>Programming language</td><td>What the project is written in. The common language of the AI ecosystem.</td></tr>
+    <tr><td>Pydantic</td><td>Data validation library</td><td>Guarantees every recorded step has the expected shape. A malformed record is refused at the door rather than surprising something three layers in.</td></tr>
+    <tr><td>DuckDB</td><td>A database that lives in one file</td><td>Fast search over records. No server to run — the user installs nothing.</td></tr>
+    <tr><td>NetworkX</td><td>Graph (network) computation</td><td>Computes "what could this step have reached afterwards".</td></tr>
+    <tr><td>httpx</td><td>HTTP requests</td><td>The only network call in the product: the optional language-model tier.</td></tr>
+    <tr><td>FastAPI</td><td>Web server framework</td><td>The local server behind the browser view. Reachable only from your own machine.</td></tr>
+    <tr><td>React + Vite</td><td>Web interface and its build tool</td><td>The timeline and failure map you see in the browser.</td></tr>
+    <tr><td>Three.js</td><td>3D graphics library</td><td>The optional 3D view. Nobody who doesn't press the button even downloads it.</td></tr>
+    <tr><td>keyring</td><td>The operating system's password vault</td><td>Your provider key goes into the OS credential store, not into a file.</td></tr>
+  </table>
+
+  <h3>The quality gate: all of it must pass before a release</h3>
+  <table>
+    <tr><th style="width:32mm">Tool</th><th>What it protects against</th></tr>
+    <tr><td>pytest</td><td>Runs the tests. If something breaks, the release stops.</td></tr>
+    <tr><td>mypy</td><td>Type errors: catches passing the wrong kind of thing to a function, before it runs.</td></tr>
+    <tr><td>Bandit + Semgrep</td><td>Security: dangerous command execution, credentials embedded in code.</td></tr>
+    <tr><td>GitHub Actions</td><td>Runs all of the above automatically on three operating systems.</td></tr>
+  </table>
+
+  <h3>Why is the project split into eleven pieces?</h3>
+  <p class="kv">A user installs all of it with one command (<code>pip install runopsy</code>).
+  The split exists so somebody who wants only the analysis engine inside their own program
+  can take that one piece: <b>core</b> (the engine) · <b>collector</b> (recording) ·
+  <b>cli</b> (commands) · <b>replay</b> (the experiment) · <b>bench</b> (measurement) ·
+  <b>adapter</b> (attaching to agents) · <b>semantic</b> (the model tier) ·
+  <b>server</b> + <b>ui</b> (the web view) · <b>inspect</b> (reading foreign logs).</p>
+  <p class="kv">The rule that matters: the engine contains no agent-specific code. That is
+  what makes supporting a second agent possible at all.</p>
+
+  <div class="foot">Page 4 — technology</div>
+</section>
+
+<!-- ─────────── PAGE 5 ─────────── -->
+<section class="page">
+  <h2>Can you trust it? We measured.</h2>
+
+  <div class="term">
+    <b>Two terms first.</b> A <b>labelled run</b> is one where the step the failure really
+    began at is known in advance — we hold the answer key. The <b>hit rate</b> is how often
+    the tool's first guess is right.
   </div>
 
-  <h3>Three ways in</h3>
   <table>
-    <tr><th>You already have</th><th>Runopsy adds</th></tr>
-    <tr><td>an agent (Hermes today)</td><td><code>runopsy run "task"</code> drives it and diagnoses the session</td></tr>
-    <tr><td>a pipeline or test suite</td><td><code>runopsy record -s "make" -s "pytest"</code> wraps it</td></tr>
-    <tr><td>Inspect AI eval logs</td><td><code>runopsy-inspect import</code> reads them into traces</td></tr>
-  </table>
-
-  <h3>The commands that matter</h3>
-  <table>
-    <tr><th>Command</th><th>What it does</th></tr>
-    <tr><td><code>demo</code></td><td>A worked example, no setup, no key. Start here.</td></tr>
-    <tr><td><code>record</code> / <code>run</code></td><td>Wrap a pipeline, or drive an agent and diagnose it in one step.</td></tr>
-    <tr><td><code>diagnose</code></td><td>Observed failure, suspected onset, what it may have reached. <code>--mode hybrid</code> adds the paid layer.</td></tr>
-    <tr><td><code>evidence --step N</code></td><td>The command, its output, the repository changes, and why the step ranked where it did.</td></tr>
-    <tr><td><code>replay --from-step N</code></td><td>Plans a controlled re-run; <code>--execute</code> tests it in a sandbox.</td></tr>
-    <tr><td><code>verify</code></td><td>Whether a trace is byte-for-byte the one recorded. Tamper evidence, not tamper proofing.</td></tr>
-    <tr><td><code>graph</code> / <code>export</code> / <code>ui</code></td><td>ASCII timeline · self-contained HTML report or OTLP · browser view, loopback only.</td></tr>
-    <tr><td><code>bench</code></td><td>Score the engine: synthetic suite, fault injection, or an external labelled corpus.</td></tr>
-    <tr><td><code>doctor</code> / <code>setup</code> / <code>config</code></td><td>Store health and credentials · key into the OS keyring · <code>runopsy.toml</code>.</td></tr>
-  </table>
-
-  <h3>What it will not do</h3>
-  <ul>
-    <li>Claim a cause it has not validated.</li>
-    <li>Send anything anywhere without <code>--mode hybrid</code>.</li>
-    <li>Execute a replay outside a disposable sandbox, or perform a blocked side effect —
-    an unrecognised tool needs human approval, failing closed.</li>
-    <li>Report a finding on a healthy run. The false-positive rate is exactly zero.</li>
-  </ul>
-
-  <div class="foot">Page 3 — usage</div>
-</section>
-
-<!-- ─────────────────────────── PAGE 4 ─────────────────────────── -->
-<section class="page">
-  <h2>The stack, and why each piece is there</h2>
-
-  <h3>Core libraries</h3>
-  <table>
-    <tr><th>Tool</th><th>What it is</th><th>Why here</th></tr>
-    <tr><td>Python 3.12</td><td>Language</td><td>Pattern matching and modern typing; the agent ecosystem lives here.</td></tr>
-    <tr><td>Pydantic v2</td><td>Typed models with validation</td><td>The trace schema. A malformed event is rejected at the boundary, not three layers deep.</td></tr>
-    <tr><td>DuckDB</td><td>Embedded analytical database</td><td>SQL over runs and steps with no server. Derived data — deletable and rebuildable.</td></tr>
-    <tr><td>Typer</td><td>CLI framework</td><td>The command surface, with help text generated from the same signatures.</td></tr>
-    <tr><td>Rich</td><td>Terminal rendering</td><td>Tables, colour and layout for the diagnosis view.</td></tr>
-    <tr><td>NetworkX</td><td>Graph algorithms</td><td>Reachability and centrality over the trace graph, for the impact layer.</td></tr>
-    <tr><td>orjson</td><td>Fast JSON</td><td>Journal serialization, with sorted keys so a run always hashes identically.</td></tr>
-    <tr><td>httpx</td><td>HTTP client</td><td>The one network call in the product: the optional semantic layer.</td></tr>
-    <tr><td>FastAPI + Uvicorn</td><td>Web framework and server</td><td>The loopback API behind <code>runopsy ui</code>.</td></tr>
-    <tr><td>OpenInference / OTel</td><td>Tracing conventions</td><td>Export shape, so a diagnosed run opens in Phoenix or Langfuse.</td></tr>
-    <tr><td>keyring</td><td>OS credential store</td><td>A provider key belongs in Credential Manager or Keychain, not a file.</td></tr>
-  </table>
-
-  <h3>Web view</h3>
-  <p class="kv"><b>React + TypeScript + Vite</b> — the UI and its build.
-  &nbsp;·&nbsp; <b>XYFlow</b> — the 2D causal map; solid edges are recorded, dashed are inference.
-  &nbsp;·&nbsp; <b>Three.js / React Three Fiber</b> — the optional 3D view, lazy-loaded so nobody
-  who ignores the toggle downloads it. &nbsp;·&nbsp; <b>Zustand, TanStack Query</b> — state and fetching.</p>
-
-  <h3>Quality gate — every one of these must pass to release</h3>
-  <table>
-    <tr><th>Tool</th><th>Guards against</th></tr>
-    <tr><td>pytest + Hypothesis</td><td>Regressions; property-based tests on the graph and schema.</td></tr>
-    <tr><td>Ruff</td><td>Lint and format, one tool, no debate.</td></tr>
-    <tr><td>mypy</td><td>Type errors across all ten packages, named explicitly so the list cannot narrow silently.</td></tr>
-    <tr><td>Bandit + Semgrep</td><td>Unsafe subprocess use, injection, hardcoded credentials.</td></tr>
-    <tr><td>uv + hatchling</td><td>Reproducible resolution and wheel builds.</td></tr>
-    <tr><td>GitHub Actions</td><td>The whole gate on three platforms, before anything is published.</td></tr>
-  </table>
-
-  <h3>The eleven packages</h3>
-  <p class="kv"><code>runopsy</code> is the meta-distribution <code>pip install runopsy</code>
-  resolves to. Below it, so a library user can depend on one piece:
-  <b>core</b> (schema, detectors, ranking — needs only Pydantic) ·
-  <b>collector</b> (journals, index, vault, retention) ·
-  <b>cli</b> · <b>replay</b> (checkpoint restore, counterfactual execution) ·
-  <b>bench</b> (cases, metrics, fault injection, external benchmarks) ·
-  <b>adapter</b> (shell + Hermes) · <b>semantic</b> (the paid layer) ·
-  <b>server</b> (API + web view) · <b>ui</b> (React) · <b>inspect</b> (Inspect AI logs).</p>
-  <p class="kv"><code>runopsy-core</code> never imports runtime-specific code — it accepts
-  only the normalized graph. That is what makes a second runtime adapter possible.</p>
-
-  <div class="foot">Page 4 — stack</div>
-</section>
-
-<!-- ─────────────────────────── PAGE 5 ─────────────────────────── -->
-<section class="page">
-  <h2>What "tested" means here</h2>
-
-  <h3>The test suite — 916 tests</h3>
-  <table>
-    <tr><th>Kind</th><th>What it checks</th></tr>
-    <tr><td>Unit &amp; property</td><td>Schema, detectors, ranking, impact. Hypothesis generates graphs the author would not have thought of.</td></tr>
-    <tr><td>Integration</td><td>Real shell commands, real exit codes, real timing — recorded through the same adapter a user gets.</td></tr>
-    <tr><td>Real git repositories</td><td>Repository capture and checkpoint restore run against an actual <code>git</code>, not a stub. A fake that agrees with the parser proves only that one person wrote both.</td></tr>
-    <tr><td>Concurrency</td><td>32 real subprocesses against one store. The defect it pins was invisible in-process.</td></tr>
-    <tr><td>Wording</td><td>That no output path claims causation for an unvalidated finding. Treated as a defect of the same rank as a crash.</td></tr>
-    <tr><td>Packaging</td><td>That the CI list, the docs and the published metadata have not fallen behind the code.</td></tr>
-  </table>
-
-  <h3>The four measurements — including the ones that go badly</h3>
-  <table>
-    <tr><th>Benchmark</th><th>What it measures</th><th class="num">Onset top-1</th></tr>
-    <tr><td>Runopsy-Bench (20 synthetic)</td><td>Does the ranking behave as designed</td><td class="num"><b>94.4%</b></td></tr>
-    <tr><td><i>— baseline: blame the last failure</i></td><td><i>What reading a log achieves</i></td><td class="num">22.2%</td></tr>
-    <tr><td>Fault injection into a <b>real recorded run</b></td><td>Can it find a known break in a real trace</td><td class="num"><b>100%</b></td></tr>
-    <tr><td>TRAIL — expert-labelled SWE-Bench traces</td><td>Does it agree with human experts on real coding agents</td><td class="num"><b>0.0%</b></td></tr>
-    <tr><td>Who&amp;When — expert-labelled multi-agent</td><td>The same, on conversation traces</td><td class="num"><b>0.0%</b></td></tr>
+    <tr><th style="width:52mm">Measurement</th><th>What it tests</th><th class="num">Hit rate</th></tr>
+    <tr><td>20 constructed runs</td><td>Whether the ranking works as designed</td><td class="num"><b>94.4%</b></td></tr>
+    <tr><td><i>— for comparison: blame the last failing step</i></td><td><i>What reading the log bottom-up achieves</i></td><td class="num">22.2%</td></tr>
+    <tr><td>Faults injected into <b>a real recording</b></td><td>Whether it finds a known break in a real run</td><td class="num"><b>100%</b></td></tr>
+    <tr><td>TRAIL — real agent runs, hand-labelled by experts</td><td>Whether it agrees with experts on real coding agents</td><td class="num"><b>0.0%</b></td></tr>
+    <tr><td>Who&amp;When — expert-labelled multi-agent runs</td><td>The same, on conversational runs</td><td class="num"><b>0.0%</b></td></tr>
   </table>
 
   <div class="note">
-    <b>Why the last two are published.</b> Runopsy localizes onsets that <i>were themselves
-    failures</i> — a step that errored before the visible symptom did. On TRAIL, not one of
-    the 30 annotated onsets carries an error status of any kind: they are formatting
-    mistakes, instruction non-compliance, a wrong assumption about a file path. The
-    deterministic layers read exit codes, so they are blind to those by construction. The
-    94.4% and the 0.0% describe the same engine on different kinds of failure, and a page
-    carrying only the first would be selling rather than measuring.
+    <b>Why are those two zeros here?</b> Because they say <i>where the tool does not
+    work</i>, and writing that down is more honest than letting you discover it.
+    <br><br>
+    Runopsy finds steps that <b>themselves errored</b> — in the page 1 example, step 9 had
+    already returned an error code. Across TRAIL's 30 runs, <b>not one</b> of the steps the
+    experts marked errored at all: one wrote its output in the wrong format, one skipped an
+    instruction, one assumed the wrong file path. None of them look like errors; they are
+    just <i>wrong decisions</i>. Runopsy's free tiers read error codes, so they are blind to
+    these by construction. The language-model tier exists for exactly this case.
   </div>
 
-  <h3>Honest limits, as of version 0.1.7</h3>
+  <h3>What "tested" means here — 916 tests</h3>
+  <table>
+    <tr><th style="width:40mm">Kind</th><th>What it checks</th></tr>
+    <tr><td>Real commands</td><td>Not mocked: real terminal commands are run and their real exit codes recorded.</td></tr>
+    <tr><td>Real git repositories</td><td>File-change tracking is tested against real <code>git</code>, not a stand-in.</td></tr>
+    <tr><td>32 simultaneous processes</td><td>Proves nothing is lost when recording in parallel. That defect was invisible in a single process.</td></tr>
+    <tr><td>Wording checks</td><td>That no output claims a definite cause for something unvalidated. Treated as seriously as a crash.</td></tr>
+    <tr><td>A healthy run</td><td>That a run with nothing wrong produces <b>no</b> finding at all. The false alarm rate is exactly zero.</td></tr>
+  </table>
+
+  <h3>What is missing today</h3>
   <ul>
-    <li><b>Seven of fifteen detectors</b> have fired on a real recorded run. Three cannot
-    fire on one at all — they need fields or event kinds no current adapter produces.</li>
-    <li><b>One live runtime adapter.</b> The architecture is runtime-agnostic; only Hermes
-    proves it so far.</li>
-    <li><b>No corpus of our own.</b> <code>runopsy label</code> exists; the corpus is
-    empty. Filling it needs a person reading real failures — doing it from inside the
-    project would grade the engine against its own opinion.</li>
-    <li><b>Semantic localization is unmeasured.</b> The layer that could answer TRAIL has
-    not been scored on it.</li>
+    <li><b>7 of the 15 checks</b> have done work on a real recording. Three never can —
+    they look at information today's agents don't produce.</li>
+    <li><b>One supported agent</b> (Hermes). The architecture is open to others, but today
+    there is one.</li>
+    <li><b>We have no labelled archive of our own.</b> Filling one takes a person reading
+    real failures and saying where each began. Doing it from inside the project would grade
+    the tool against its own opinion.</li>
+    <li><b>The language-model tier is unmeasured.</b> It is the only tier that could answer
+    TRAIL, and it has not been scored on it yet.</li>
   </ul>
 
-  <h3>Where it goes next</h3>
-  <p class="kv">1. Record more real runs — every headline number except the injection one
-  still comes from traces the project wrote itself. &nbsp;2. Score the semantic layer on
-  TRAIL, the case the deterministic engine misses by design. &nbsp;3. Give
-  <code>retry_storm</code> something real to fire on, or remove it. &nbsp;4. A second live
-  runtime adapter.</p>
+  <h3>In short</h3>
+  <p class="lede">When your agent fails a task, Runopsy tells you <b>where to look</b>,
+  shows you <b>why it thinks so</b>, and offers to <b>test whether it is right</b>. It says
+  so when it doesn't know — and it writes down where it doesn't work.</p>
 
-  <div class="foot">Page 5 — evidence and limits · Built by Vahit Feryad · ORCID 0000-0002-3282-339X</div>
+  <div class="foot">Page 5 — trust and limits · Vahit Feryad · ORCID 0000-0002-3282-339X</div>
 </section>

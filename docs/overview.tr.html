@@ -1,26 +1,20 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Runopsy — uçtan uca genel bakış</title>
+<title>Runopsy — sıfırdan anlatım</title>
 <style>
-  @page { size: A4; margin: 14mm 15mm; }
+  @page { size: A4; margin: 12mm 14mm; }
   * { box-sizing: border-box; }
-  body {
-    font: 10pt/1.45 "Segoe UI", system-ui, sans-serif;
-    color: #1c1f26; margin: 0;
-  }
-  h1 { font-size: 20pt; margin: 0 0 2mm; letter-spacing: -.3px; }
-  h1 + .sub { color: #5a6472; font-size: 10.5pt; margin: 0 0 6mm; }
-  h2 {
-    font-size: 12pt; margin: 7mm 0 2.5mm; padding-bottom: 1.2mm;
-    border-bottom: 1.5px solid #1c1f26;
-  }
-  h3 { font-size: 10pt; margin: 4mm 0 1.5mm; color: #2c3340; }
-  p { margin: 0 0 2.5mm; }
-  .lede { font-size: 10.5pt; }
-  table { width: 100%; border-collapse: collapse; margin: 2mm 0 3mm; font-size: 8.7pt; }
-  th { text-align: left; font-weight: 600; border-bottom: 1px solid #99a2b0; padding: 1.4mm 2mm 1.4mm 0; }
-  td { padding: 1.3mm 2mm 1.3mm 0; border-bottom: 1px solid #e6e9ee; vertical-align: top; }
-  td:first-child, th:first-child { white-space: nowrap; padding-right: 4mm; }
+  body { font: 9.2pt/1.38 "Segoe UI", system-ui, sans-serif; color: #1c1f26; margin: 0; }
+  h1 { font-size: 18pt; margin: 0 0 1.5mm; letter-spacing: -.3px; }
+  h1 + .sub { color: #5a6472; font-size: 9.8pt; margin: 0 0 4mm; }
+  h2 { font-size: 11pt; margin: 4.5mm 0 2mm; padding-bottom: 1.2mm; border-bottom: 1.5px solid #1c1f26; }
+  h3 { font-size: 9.4pt; margin: 3mm 0 1.2mm; color: #2c3340; }
+  p { margin: 0 0 2mm; }
+  .lede { font-size: 9.8pt; }
+  table { width: 100%; border-collapse: collapse; margin: 1.6mm 0 2.4mm; font-size: 8.2pt; }
+  th { text-align: left; font-weight: 600; border-bottom: 1px solid #99a2b0; padding: 1.1mm 2mm 1.1mm 0; }
+  td { padding: 1mm 2mm 1mm 0; border-bottom: 1px solid #e6e9ee; vertical-align: top; }
+  td:first-child, th:first-child { padding-right: 4mm; }
   code, .mono {
     font-family: Consolas, "Courier New", monospace; font-size: 8.3pt;
     background: #f0f2f6; padding: 0 .8mm; border-radius: .7mm;
@@ -28,322 +22,321 @@
   .num { text-align: right; white-space: nowrap; }
   .page { page-break-after: always; }
   .page:last-child { page-break-after: auto; }
-  .flow { display: flex; align-items: stretch; gap: 0; margin: 3mm 0 4mm; }
-  .step {
-    flex: 1; border: 1.2px solid #1c1f26; border-radius: 2mm; padding: 2mm 2.4mm;
-    font-size: 8.3pt; position: relative;
-  }
-  .step b { display: block; font-size: 8.8pt; margin-bottom: .8mm; }
+  .flow { display: flex; align-items: stretch; margin: 2.4mm 0 3mm; }
+  .step { flex: 1; border: 1.2px solid #1c1f26; border-radius: 2mm; padding: 1.6mm 2mm; font-size: 7.7pt; }
+  .step b { display: block; font-size: 8.7pt; margin-bottom: .8mm; }
   .step small { color: #5a6472; }
-  .arrow { align-self: center; padding: 0 1.6mm; color: #99a2b0; font-size: 12pt; }
-  .layers { margin: 2mm 0 3mm; }
-  .layer {
-    display: flex; gap: 3mm; padding: 1.6mm 0; border-bottom: 1px solid #e6e9ee; font-size: 8.7pt;
-  }
-  .layer .tag { flex: 0 0 19mm; font-weight: 600; color: #2c3340; }
+  .arrow { align-self: center; padding: 0 1.5mm; color: #99a2b0; font-size: 12pt; }
   .free { color: #1a7f4b; font-weight: 600; }
   .paid { color: #b06a00; font-weight: 600; }
-  .note {
-    background: #f4f6f9; border-left: 2.5px solid #99a2b0; padding: 2mm 3mm;
-    margin: 3mm 0; font-size: 8.8pt;
+  .note { background: #f4f6f9; border-left: 2.5px solid #99a2b0; padding: 1.6mm 2.6mm; margin: 2.2mm 0; font-size: 8.3pt; }
+  .term { background: #fffaf0; border-left: 2.5px solid #d9a441; padding: 1.6mm 2.6mm; margin: 2.2mm 0; font-size: 8.2pt; }
+  .term b { color: #7a5410; }
+  .screen {
+    background: #1c1f26; color: #e8ecf2; font-family: Consolas, "Courier New", monospace;
+    font-size: 7.4pt; line-height: 1.42; padding: 2.4mm 3mm; border-radius: 2mm; margin: 2.5mm 0;
+    white-space: pre-wrap;
   }
-  .note b { color: #1c1f26; }
-  .foot { margin-top: 5mm; color: #7b8494; font-size: 8pt; border-top: 1px solid #e6e9ee; padding-top: 2mm; }
-  .kv { font-size: 8.7pt; }
+  .screen .r { color: #ff8a80; } .screen .y { color: #ffcc66; } .screen .g { color: #9fd68a; }
+  .screen .d { color: #8b95a5; }
+  .foot { margin-top: 3.5mm; color: #7b8494; font-size: 8pt; border-top: 1px solid #e6e9ee; padding-top: 2mm; }
+  .kv { font-size: 8.2pt; }
   ul { margin: 0 0 2.5mm; padding-left: 4.5mm; }
-  li { margin-bottom: 1.1mm; font-size: 9pt; }
+  li { margin-bottom: .9mm; font-size: 8.5pt; }
 </style>
 
-<!-- ─────────────── SAYFA 1 ─────────────── -->
+<!-- ─────────── SAYFA 1 ─────────── -->
 <section class="page">
   <h1>Runopsy</h1>
-  <p class="sub">AI ajan koşuları için nedensel hata analizi — uçtan uca genel bakış.</p>
+  <p class="sub">Hiç duymamış birine, baştan sona.</p>
 
-  <p class="lede"><b>Nedir.</b> Bir AI ajanının ne yaptığını kaydeden, sonra koşunun
-  <i>nerede bozulmaya başladığını</i> — nerede durduğunu değil — bulan ve bu iddianın
-  kanıtını gösteren, yerel çalışan bir komut satırı aracı. İddiayı sınamak için izi tek
-  bir değişiklikle yeniden çalıştırabilir.</p>
+  <h2>Önce: ortada ne var?</h2>
+  <p class="lede">Bugün yazılımcıların bir kısmı işi <b>yapay zekâ ajanlarına</b>
+  yaptırıyor. Ajan, kendisine verilen görevi adım adım yürüten bir program: dosya okur,
+  kod yazar, terminalde komut çalıştırır, test koşar. Bunların her birine <b>adım</b>,
+  baştan sona tamamına da <b>koşu</b> diyeceğiz.</p>
+  <p>Ajan bazen görevi beceremez. O zaman geriye elinizde uzun bir log kalır ve
+  "nerede yanlış gitti?" sorusunu tek başınıza cevaplamanız gerekir.</p>
 
-  <h2>Hangi problem için var</h2>
-  <p>Bir ajan koşusu başarısız olduğunda, son hata nadiren problemin kendisidir. Ajan
-  adım 9'da yanlış ortam için bir config yazar; kimse şikâyet etmez. Beş adım sonra bir
-  test, uç noktaya ulaşamadığı için düşer. Logu aşağıdan yukarı okur, düşen testi görür
-  ve bir saatinizi teste harcarsınız.</p>
-  <p>Hata adım 9'daydı. Belirti adım 14'te. Aradaki her şey başarılıydı, bu yüzden logda
-  geriye işaret eden hiçbir şey yok.</p>
+  <h2>Problem: hatanın göründüğü yer, olduğu yer değildir</h2>
+  <p>Gerçek bir örnek. Ajana "şu testi düzelt" diyorsunuz. 16 adım çalışıyor:</p>
+
+  <table>
+    <tr><th style="width:14mm">Adım</th><th>Ne yaptı</th><th>Sonuç</th></tr>
+    <tr><td>1–8</td><td>Dosyaları okudu, aradı, planladı</td><td>sorunsuz</td></tr>
+    <tr><td><b>9</b></td><td><b>Bir ayar dosyasını yanlış ortam için yazdı</b></td><td><b>hata verdi, ama ajan devam etti</b></td></tr>
+    <tr><td>10–13</td><td>Kodu düzenledi, servisi yeniden başlattı, kontrol etti</td><td>hepsi başarılı</td></tr>
+    <tr><td><b>14</b></td><td>Testi çalıştırdı</td><td><b>düştü</b></td></tr>
+  </table>
+
+  <p>Siz logu <b>aşağıdan yukarı</b> okursunuz — herkes öyle okur — ve adım 14'ü, yani
+  düşen testi görürsünüz. Bir saatinizi teste harcarsınız.</p>
+  <p><b>Ama hata adım 9'daydı.</b> Ajan orada yanlış adresi yazdı, sonraki dört adım
+  gayet başarılı çalıştı, ve iş ancak adım 14'te patladı. Aradaki hiçbir şey "buraya
+  bak" demiyor, çünkü aradaki hiçbir şey başarısız olmadı.</p>
 
   <div class="note">
-    <b>Ölçüldü:</b> son düşen adımı suçlamak — ki logu aşağıdan okumanın yaptığı budur —
-    etiketli bir takımda gerçek başlangıcı <b>%22,2</b> oranında buluyor. Runopsy'nin
-    deterministik motoru: <b>%94,4</b>.
+    <b>Bu ne kadar sık yanıltıyor?</b> Etiketli 20 koşuda ölçtük. "Son düşen adımı suçla"
+    yöntemi — yani logu aşağıdan okumak — gerçek başlangıcı yalnızca <b>%22,2</b> oranında
+    buluyor. Yani beş seferin dördünde yanlış yere bakıyorsunuz.
   </div>
 
-  <h2>Piyasadaki boşluk</h2>
+  <h2>Runopsy ne yapıyor?</h2>
+  <p class="lede">Ajan çalışırken her adımı sessizce kaydediyor. Koşu bittiğinde bu kaydı
+  okuyup <b>işin nerede bozulmaya başladığını</b> söylüyor — nerede patladığını değil.
+  Sonra iddiasının kanıtını gösteriyor, ve isterseniz iddiayı <i>sınıyor</i>. (Adı Run + Autopsy: bir otopsi de ölümün göründüğü anı değil sebebini arar.)</p>
+
+  <h2>Piyasada zaten var olanlar bunu neden yapmıyor?</h2>
   <table>
-    <tr><th>Kategori</th><th>Size verdiği</th><th>Cevaplamadığı</th></tr>
-    <tr><td>İzleme ve gözlemlenebilirlik<br><small>Phoenix, Langfuse, LangSmith</small></td>
-        <td>Her span, her token; aranabilir ve şık</td>
-        <td>Hatayı hangi span'in <i>başlattığı</i>. Her şeyi gösterir, hiçbirini
-        sıralamaz.</td></tr>
-    <tr><td>Değerlendirme koşum takımları<br><small>Inspect AI, SWE-bench</small></td>
-        <td>Koşu geçti mi kaldı mı, ölçekli biçimde</td>
-        <td>Neden ve nerede kaldığı. Skor, sonuç hakkında bir hükümdür; yolculuk hakkında
-        değil.</td></tr>
-    <tr><td>Ajan çatıları<br><small>Hermes, LangGraph, CrewAI</small></td>
-        <td>Koşunun kendisi ve loglar</td>
-        <td>Koşudan sonrası. Teşhis, logu okuyan insana bırakılır.</td></tr>
+    <tr><th style="width:40mm">Bugün kullanılan araçlar</th><th>Size verdiği</th><th>Cevaplamadığı</th></tr>
+    <tr><td><b>İzleme araçları</b><br><small>Ajanın her hareketini kaydedip gösteren panolar</small></td>
+        <td>Her adım, her ayrıntı; aranabilir, şık grafikler</td>
+        <td>Hangi adımın <i>sorunu başlattığı</i>. Hepsini gösterir, hiçbirini
+        işaretlemez — yani logu okuma işi yine sizde.</td></tr>
+    <tr><td><b>Değerlendirme araçları</b><br><small>Ajanı yüzlerce görevde sınayan sistemler</small></td>
+        <td>Ajan görevi başardı mı başaramadı mı, toplu skorlar</td>
+        <td>Neden başaramadığı. Skor, sonuç hakkında bir not; yolun neresinde
+        kaybettiğini söylemez.</td></tr>
+    <tr><td><b>Ajan çatıları</b><br><small>Ajanı çalıştıran altyapılar</small></td>
+        <td>Koşunun kendisi ve logları</td>
+        <td>Koşudan sonrası. Teşhis tamamen logu okuyan insana kalır.</td></tr>
     <tr><td><b>Runopsy</b></td>
-        <td>Kanıtlı ve sıralı bir <i>başlangıç</i>, yayılım, ve onu sınayan bir replay</td>
-        <td>Sohbet asistanı değildir ve kod yazmaz.</td></tr>
+        <td>İşaretlenmiş bir <b>başlangıç adımı</b>, kanıtı, etkilediği adımlar, ve iddiayı
+        sınayan bir deney</td>
+        <td>Kod yazmaz, sohbet etmez. Ajanınızın yerine geçmez, yanına takılır.</td></tr>
   </table>
 
-  <p>Ayırt edici hamle görselleştirme değil — onu herkes yeniden yapabilir. Ayırt edici
-  olan, Runopsy'nin <b>kendi iddiasını çürütmeye çalışması</b>:
-  <code>runopsy replay --execute</code> izi, şüpheli başlangıçta tek bir müdahaleyle,
-  atılabilir bir kum havuzunda yeniden çalıştırır ve ancak sonraki hatalar gerçekten
-  kaybolduğunda şüpheyi nedene yükseltir.</p>
+  <p>Asıl fark görsellik değil — onu herkes yapabilir. Fark şu: <b>Runopsy kendi
+  iddiasını çürütmeye çalışır.</b> "Adım 9'da bozuldu" dedikten sonra, koşuyu bir kopya
+  klasörde yeniden çalıştırır ve <i>yalnızca adım 9'u değiştirir</i>. Sonraki hatalar
+  gerçekten kayboluyorsa, şüphe kanıta yükselir. Kaybolmuyorsa, öyle olduğunu söyler.</p>
 
-  <h2>Tasarımın bozamayacağı üç kural</h2>
-  <ul>
-    <li><b>Önce yerel.</b> İzler, durum ve çıktılar makinenizde kalır. Açık onay olmadan
-    hiçbir şey bir sağlayıcıya ulaşmaz.</li>
-    <li><b>Önce deterministik.</b> Çekirdek analiz sıfır token harcar ve sıfır ağ çağrısı
-    yapar. Model isteğe bağlıdır ve bütçe tavanlıdır.</li>
-    <li><b>Kalibre edilmiş dil.</b> Bir bulgu, bir replay ya da isimli bir insan aksini
-    söyleyene kadar <i>şüpheli başlangıç</i> kalır. "Kesin kök neden" seçeneği yoktur.</li>
-  </ul>
-
-  <div class="foot">Runopsy 0.1.7 · Apache-2.0 · github.com/vahit19/runopsy · pip install runopsy
-  &nbsp;·&nbsp; İngilizce aslından çeviri; teknik kaynak İngilizce sürümdür.</div>
+  <div class="foot">Runopsy 0.1.7 · Ücretsiz ve açık kaynak (Apache-2.0) · <code>pip install runopsy</code>
+  &nbsp;·&nbsp; İngilizce aslından çeviri.</div>
 </section>
 
-<!-- ─────────────── SAYFA 2 ─────────────── -->
+<!-- ─────────── SAYFA 2 ─────────── -->
 <section class="page">
-  <h2>Nasıl çalışır: zincir, baştan sona</h2>
+  <h2>Kullanınca ne görüyorsunuz?</h2>
+  <p>Kurulum tek satır, sonra hazır bir örnek çalıştırabilirsiniz — ne bir ajan kurmanız
+  gerekiyor, ne bir anahtar, ne ayar:</p>
+  <div class="screen">pip install runopsy
+runopsy demo</div>
+
+  <p>Ekrana gelen şey, sayfa 1'deki hikâyenin gerçek çıktısı:</p>
+
+  <div class="screen"><span class="d">Koşu demo_run — ödeme servisindeki düşen testi düzelt
+demo · 16 olay · başarısız</span>
+
+<span class="r">Gözlenen hata</span>  <span class="d">(koşunun gözle görülür şekilde yaptığı yanlış)</span>
+  adım 14 pytest
+  'pytest' aracı 1 çıkış koduyla düştü
+
+<span class="y">Şüpheli başlangıç</span>  <span class="d">(nerede bozulmaya başlamış olabilir — doğrulanmadı)</span>
+  adım 9 write_config
+  'write_config' aracı 1 çıkış koduyla düştü
+  <span class="d">%47 güven, doğrulanmadı
+  şunlara ulaşmış olabilir: adım 10, adım 11, adım 12 ve 2 tane daha
+  kanıt için: runopsy evidence demo_run --step 9</span>
+
+<span class="d">Henüz hiçbir neden doğrulanmadı. Bu adayı sınamak için oradan yeniden çalıştırın:
+  runopsy replay demo_run --from-step 9</span></div>
+
+  <h3>Bu çıktıda üç ayrı şey var, ve birbirine karıştırılmıyor</h3>
+  <table>
+    <tr><th style="width:34mm">Ne diyor</th><th>Anlamı</th><th>Ne kadar güvenilir</th></tr>
+    <tr><td><b>Gözlenen hata</b></td><td>Koşunun gözle görülür şekilde yaptığı yanlış. Adım 14'te test düştü.</td><td>Bu bir <b>olgu</b>. Tartışma yok.</td></tr>
+    <tr><td><b>Şüpheli başlangıç</b></td><td>İşin muhtemelen burada bozulduğu. Adım 9.</td><td>Bir <b>tahmin</b>. Güven hiçbir zaman %75'i geçemez.</td></tr>
+    <tr><td><b>Replay-destekli</b></td><td>Deney yapıldı, o adım değiştirilince sonraki hatalar kayboldu.</td><td>Artık <b>kanıtlı</b>. %90'a kadar çıkabilir.</td></tr>
+  </table>
+
+  <div class="term">
+    <b>Neden bu ayrım bu kadar önemli?</b> Bir teşhis aracının en kolay yolu, emin
+    olmadığı şeye emin gibi konuşmaktır. Bir kere yanlış yere kesin dille yönlendirirse,
+    kimse bir daha ona güvenmez. Bu yüzden Runopsy "kesin kök neden" diye bir seçenek
+    <i>sunmuyor</i> — deney yapılana ya da bir insan onaylayana kadar hep "şüpheli" der.
+  </div>
+
+  <h3>Kendi işinizde kullanmak</h3>
+  <p>Ajanınız olmasa bile işe yarar. Zaten çalıştırdığınız her şeyi sarabilir:</p>
+  <div class="screen">runopsy record -s "make" -s "pytest"   <span class="d"># kendi komutlarınızı kaydet</span>
+runopsy diagnose latest                 <span class="d"># nerede bozulmaya başladı</span>
+runopsy evidence latest --step 9        <span class="d"># o adımda tam olarak ne oldu</span>
+runopsy ui                              <span class="d"># tarayıcıda görsel harita</span></div>
+
+  <table>
+    <tr><th style="width:44mm">Elinizde bu varsa</th><th>Runopsy şunu ekler</th></tr>
+    <tr><td>Bir yapay zekâ ajanı</td><td>Ajanı çalıştırır ve oturumu tek komutta teşhis eder</td></tr>
+    <tr><td>Bir build ya da test hattı</td><td>Komutlarınızı sarar, kaydeder, teşhis eder</td></tr>
+    <tr><td>Henüz hiçbir şey</td><td><code>runopsy demo</code> — tek komutta işlenmiş örnek</td></tr>
+  </table>
+
+  <div class="foot">Sayfa 2 — ne görüyorsunuz, nasıl kullanıyorsunuz</div>
+</section>
+
+<!-- ─────────── SAYFA 3 ─────────── -->
+<section class="page">
+  <h2>İçeride ne oluyor?</h2>
+  <p>Beş aşama. Her biri bir öncekinin çıktısını alır:</p>
 
   <div class="flow">
-    <div class="step"><b>1 · Yakala</b><small>Bir runtime adaptörü ajana kancalanır. Olay
-      başına bir <code>runopsy hook</code> süreci.</small></div>
+    <div class="step"><b>1 · Kaydet</b><small>Ajan her adımı attığında Runopsy'ye küçük
+      bir haber gider ve diske yazılır.</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>2 · Normalleştir</b><small>Runtime olayları tipli bir grafa
-      dönüşür: düğümler ve kenarlar, OpenInference uyumlu.</small></div>
+    <div class="step"><b>2 · Düzenle</b><small>Farklı ajanların farklı log biçimleri tek
+      ve ortak bir yapıya çevrilir.</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>3 · Tespit et</b><small>15 dedektör grafı okur ve <i>sinyal</i>
-      üretir: hatalar, döngüler, durum çelişkileri.</small></div>
+    <div class="step"><b>3 · Ara</b><small>15 ayrı kontrol kaydı tarar: düşen adımlar,
+      kısır döngüler, çelişen durumlar.</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>4 · Sırala</b><small>Sinyaller sıralı <i>adaylara</i> dönüşür;
-      ciddiyet, öncelik ve etki ile puanlanır.</small></div>
+    <div class="step"><b>4 · Sırala</b><small>Bulunanlar puanlanır: ne kadar ciddi, ne
+      kadar erken, sonrasını ne kadar etkilemiş.</small></div>
     <div class="arrow">→</div>
-    <div class="step"><b>5 · Doğrula</b><small>Tek müdahaleli, kum havuzunda bir replay
-      en üstteki adayı sınar.</small></div>
+    <div class="step"><b>5 · Sına</b><small>En güçlü aday, kopya klasörde tek değişiklikle
+      yeniden çalıştırılarak denenir.</small></div>
   </div>
 
-  <h3>Depolama: bilerek iki yarım</h3>
-  <p class="kv"><b>JSONL journal</b> — yalnızca ekleme yapılan, koşu başına tek dosya,
-  <i>yetkili</i> kayıt. Önce yazılır ve yazılırken zincirleme özetle mühürlenir.
-  &nbsp;·&nbsp; <b>DuckDB indeksi</b> — türetilmiş, sorgulanabilir, journal'dan yeniden
-  kurulabilir. Okuma sırasında ikisi uzlaştırılır.</p>
-  <p class="kv">Nedeni: DuckDB tek bir yazan sürece izin verir. Paralel alt ajanları olan
-  bir ajan aynı anda birkaç hook başlatır, dolayısıyla indeks yazımları doğal olarak
-  kaybolur. Journal bunu tek başına atlatmak zorundadır — ve atlatır.</p>
-
-  <h3>Beş analiz katmanı</h3>
-  <div class="layers">
-    <div class="layer"><span class="tag">L0 yapısal</span>
-      <span>Runtime'ın zaten bildirdiği olgular: çıkış kodları, durumlar, zaman aşımları,
-      eksik olaylar. Hiçbir şey yorumlanmaz, dolayısıyla anlam konusunda yanılamaz.
-      <span class="free">sıfır token</span></span></div>
-    <div class="layer"><span class="tag">L1 davranışsal</span>
-      <span>Adımlar arası örüntüler: verimsiz döngüler, yeniden deneme fırtınaları, sürekli
-      eski değerine dönen durum. <span class="free">sıfır token</span></span></div>
-    <div class="layer"><span class="tag">L2 graf etkisi</span>
-      <span>Başlangıcın neye ulaşmış olabileceği — yalnızca zamanda ileri erişilebilirlik,
-      çıkarım olarak çizilir, asla kayıt olarak değil. <span class="free">sıfır token</span></span></div>
-    <div class="layer"><span class="tag">L3 anlamsal</span>
-      <span>Bir model, zaten şüpheli bulunmuş birkaç adımı okur. İsteğe bağlı, bütçe
-      tavanlı, bir statüyü yükseltemez. <span class="paid">para harcar</span></span></div>
-    <div class="layer"><span class="tag">L4 doğrulama</span>
-      <span>Karşı-olgusal replay ya da isimli bir insan. Bir şeye "neden" diyebilecek tek
-      mekanizma. <span class="free">kum havuzunda</span></span></div>
+  <div class="term">
+    <b>2. aşama neden var?</b> Her ajan kendi biçiminde log tutar. Runopsy hepsini aynı
+    yapıya çevirir; böylece analiz kısmı hangi ajanla çalıştığını hiç bilmek zorunda
+    kalmaz. Yarın başka bir ajan eklemek, yalnızca yeni bir çevirici yazmak demek.
   </div>
 
-  <h3>Asla birbirine karıştırılmayan üç statü</h3>
+  <h3>3. aşama: o 15 kontrol neye bakıyor?</h3>
+  <p class="kv">Örnekler: <b>bir adım hata koduyla döndü mü</b> · <b>ajan aynı komutu
+  boşuna tekrar tekrar mı çalıştırıyor</b> (takılmış olabilir) · <b>bir şeyi yapıp geri
+  alıp yine yapıyor mu</b> · <b>bir adım zaman aşımına mı uğradı</b> · <b>koşu "başardım"
+  derken içinde düşen adım var mı</b> · <b>belirlenen bütçe aşıldı mı</b>.</p>
+
+  <h3>Sorular dört kademede soruluyor</h3>
   <table>
-    <tr><th>Statü</th><th>Anlamı</th><th>Güven</th></tr>
-    <tr><td>gözlenen hata</td><td>Koşunun gözle görülür şekilde yaptığı yanlış. Bir olgu.</td><td>—</td></tr>
-    <tr><td>şüpheli başlangıç</td><td>Nerede başlamış olabileceği. Korelasyon ve sıralama.</td><td>0,75 altında sınırlı</td></tr>
-    <tr><td>replay-destekli</td><td>Onu değiştirmek sonraki hataları ortadan kaldırdı.</td><td>0,9'a kadar</td></tr>
+    <tr><th style="width:30mm">Kademe</th><th>Ne sorar</th><th>Maliyet</th></tr>
+    <tr><td><b>Olgular</b></td><td>Ne düştü, ne zaman aşımına uğradı, ne eksik kaldı. Yorum yok, sadece kayıtta yazan.</td><td class="free">ücretsiz</td></tr>
+    <tr><td><b>Davranış</b></td><td>Adımlar arası örüntüler: kısır döngü, boşuna tekrar, sürekli geri alınan iş.</td><td class="free">ücretsiz</td></tr>
+    <tr><td><b>Etki</b></td><td>Bu adım sonrasında neleri etkilemiş olabilir. Sadece ileriye doğru — geçmiş etkilenemez.</td><td class="free">ücretsiz</td></tr>
+    <tr><td><b>Anlam</b></td><td>Bir dil modeli, <i>zaten şüpheli bulunmuş</i> birkaç adımı okur. İsteğe bağlı.</td><td class="paid">para harcar</td></tr>
+    <tr><td><b>Deney</b></td><td>Kopya klasörde tek müdahaleyle yeniden çalıştırma. Bir şeye "neden" diyebilen tek kademe.</td><td class="free">ücretsiz</td></tr>
   </table>
 
   <div class="note">
-    Zamansal sıra artı korelasyon, nedensellik <b>kanıtı değildir</b> ve çıktı bunu asla
-    iddia etmez. Koddaki bir koruma (<code>asserts_causation</code>), herhangi bir çıktı
-    yolu doğrulanmamış bir bulgu için nedensellik iddia ederse derlemeyi düşürür.
+    İlk üç kademe <b>hiç para harcamaz ve internete çıkmaz</b> — bütün temel analiz burada
+    biter. Dil modeli isteğe bağlı bir ek, ve yalnızca zaten şüpheli bulunmuş birkaç adıma
+    bakar; bütün koşuyu bir modele yollamaz. Harcayacağı para için tavan koyarsınız.
   </div>
 
-  <div class="foot">Sayfa 2 — mimari</div>
+  <h3>Kayıt neden iki ayrı dosyada tutuluyor?</h3>
+  <p class="kv">Biri <b>defter</b>: sadece alta ekleme yapılan düz bir metin dosyası,
+  asıl kayıt bu. Diğeri <b>indeks</b>: hızlı sorgu için bir veritabanı, ve tamamen
+  defterden yeniden üretilebilir.</p>
+  <p class="kv">Sebep pratik: veritabanına aynı anda yalnızca tek bir program yazabilir.
+  Ajan işi paralel yardımcılara böldüğünde aynı anda birkaç kayıt gelir ve veritabanı
+  bunların bir kısmını reddeder. Defter bunu tek başına atlatmak zorunda — ve atlatıyor.
+  Ayrıca defter yazılırken mühürleniyor, böylece <code>runopsy verify</code> size kaydın
+  sonradan değiştirilip değiştirilmediğini söyleyebiliyor.</p>
+
+  <div class="foot">Sayfa 3 — içerideki mekanizma</div>
 </section>
 
-<!-- ─────────────── SAYFA 3 ─────────────── -->
+<!-- ─────────── SAYFA 4 ─────────── -->
 <section class="page">
-  <h2>Kullanımı</h2>
+  <h2>Neyle yapıldı?</h2>
+  <p>Her satırda: aracın adı, <i>ne işe yarayan bir şey olduğu</i>, ve bu projede neden
+  kullanıldığı.</p>
 
-  <div class="flow">
-    <div class="step"><b>Bağla</b><small><code>runopsy adapter hermes</code> — hook bloğunu
-      yapıştır. Ya da her şeyi sar: <code>runopsy record -s "make" -s "pytest"</code>.</small></div>
-    <div class="arrow">→</div>
-    <div class="step"><b>Çalıştır</b><small>Normal çalış. Kayıt pasiftir ve gözlediği koşuyu
-      asla bozmaz.</small></div>
-    <div class="arrow">→</div>
-    <div class="step"><b>Teşhis et</b><small><code>runopsy diagnose latest</code> —
-      başlangıç, kanıt, yayılım.</small></div>
-    <div class="arrow">→</div>
-    <div class="step"><b>Sına</b><small><code>runopsy replay --from-step N --execute</code>
-      — kum havuzu, tek müdahale.</small></div>
+  <table>
+    <tr><th style="width:26mm">Araç</th><th style="width:44mm">Nedir</th><th>Burada ne işi var</th></tr>
+    <tr><td>Python 3.12</td><td>Programlama dili</td><td>Projenin yazıldığı dil. Yapay zekâ ekosisteminin ortak dili.</td></tr>
+    <tr><td>Pydantic</td><td>Veri doğrulama kütüphanesi</td><td>Kaydedilen her adımın beklenen biçimde olmasını garanti eder. Bozuk bir kayıt kapıda reddedilir, üç katman içeride sürpriz olmaz.</td></tr>
+    <tr><td>DuckDB</td><td>Tek dosyada çalışan veritabanı</td><td>Kayıtlarda hızlı arama. Sunucu kurulumu gerektirmez — kullanıcı hiçbir şey kurmaz.</td></tr>
+    <tr><td>NetworkX</td><td>Graf (ağ) hesaplama</td><td>"Bu adım sonrasında nereye ulaşmış olabilir" sorusunu hesaplar.</td></tr>
+    <tr><td>httpx</td><td>İnternet istekleri</td><td>Üründeki tek ağ çağrısı: isteğe bağlı dil modeli katmanı.</td></tr>
+    <tr><td>FastAPI</td><td>Web sunucusu çatısı</td><td>Tarayıcıdaki görsel harita için yerel sunucu. Sadece kendi bilgisayarınızdan erişilir.</td></tr>
+    <tr><td>React + Vite</td><td>Web arayüzü ve derleyicisi</td><td>Tarayıcıda gördüğünüz zaman çizelgesi ve hata haritası.</td></tr>
+    <tr><td>Three.js</td><td>3B grafik kütüphanesi</td><td>İsteğe bağlı 3B görünüm. Düğmeye basmayan kimse indirmez bile.</td></tr>
+    <tr><td>keyring</td><td>İşletim sisteminin şifre kasası</td><td>Sağlayıcı anahtarınız Windows Credential Manager'a yazılır, dosyaya değil.</td></tr>
+  </table>
+
+  <h3>Kalite kapısı: yayınlanmadan önce hepsi geçmek zorunda</h3>
+  <table>
+    <tr><th style="width:32mm">Araç</th><th>Neye karşı korur</th></tr>
+    <tr><td>pytest</td><td>Testleri çalıştırır. Bir şey bozulursa yayın durur.</td></tr>
+    <tr><td>mypy</td><td>Tip hataları: bir fonksiyona yanlış türde şey verilmesini önceden yakalar.</td></tr>
+    <tr><td>Bandit + Semgrep</td><td>Güvenlik: tehlikeli komut çalıştırma, koda gömülü şifre.</td></tr>
+    <tr><td>GitHub Actions</td><td>Bütün bunları üç ayrı işletim sisteminde otomatik koşturur.</td></tr>
+  </table>
+
+  <h3>Proje neden on bir parçaya bölünmüş?</h3>
+  <p class="kv">Kullanıcı tek komutla hepsini kurar (<code>pip install runopsy</code>).
+  Ama biri sadece analiz motorunu kendi programında kullanmak isterse, tek parçayı
+  alabilsin diye ayrılmış: <b>core</b> (analiz motoru) · <b>collector</b> (kayıt) ·
+  <b>cli</b> (komutlar) · <b>replay</b> (deney) · <b>bench</b> (ölçüm) ·
+  <b>adapter</b> (ajanlara bağlanma) · <b>semantic</b> (dil modeli katmanı) ·
+  <b>server</b> + <b>ui</b> (web arayüzü) · <b>inspect</b> (dış log okuma).</p>
+  <p class="kv">Kritik kural: analiz motoru hiçbir ajana özgü kod içermez. İkinci bir
+  ajan desteği eklemeyi mümkün kılan şey bu.</p>
+
+  <div class="foot">Sayfa 4 — teknoloji</div>
+</section>
+
+<!-- ─────────── SAYFA 5 ─────────── -->
+<section class="page">
+  <h2>Güvenilir mi? Ölçtük.</h2>
+
+  <div class="term">
+    <b>Önce iki terim.</b> <b>Etiketli koşu</b>: hatanın gerçekte hangi adımda başladığı
+    önceden bilinen bir koşu — cevap anahtarı elimizde. <b>İsabet oranı</b>: aracın
+    birinci tahmininin doğru çıkma yüzdesi.
   </div>
 
-  <h3>Üç giriş yolu</h3>
   <table>
-    <tr><th>Elinizde olan</th><th>Runopsy'nin eklediği</th></tr>
-    <tr><td>bir ajan (bugün Hermes)</td><td><code>runopsy run "görev"</code> onu sürer ve oturumu teşhis eder</td></tr>
-    <tr><td>bir pipeline ya da test takımı</td><td><code>runopsy record -s "make" -s "pytest"</code> onu sarar</td></tr>
-    <tr><td>Inspect AI değerlendirme logları</td><td><code>runopsy-inspect import</code> onları ize dönüştürür</td></tr>
-  </table>
-
-  <h3>Önemli komutlar</h3>
-  <table>
-    <tr><th>Komut</th><th>Ne yapar</th></tr>
-    <tr><td><code>demo</code></td><td>İşlenmiş bir örnek; kurulum yok, anahtar yok. Buradan başlayın.</td></tr>
-    <tr><td><code>record</code> / <code>run</code></td><td>Bir pipeline'ı sarar, ya da bir ajanı sürüp tek adımda teşhis eder.</td></tr>
-    <tr><td><code>diagnose</code></td><td>Gözlenen hata, şüpheli başlangıç, neye ulaşmış olabileceği. <code>--mode hybrid</code> ücretli katmanı ekler.</td></tr>
-    <tr><td><code>evidence --step N</code></td><td>Komut, çıktısı, depodaki değişiklikler ve adımın neden orada sıralandığı.</td></tr>
-    <tr><td><code>replay --from-step N</code></td><td>Kontrollü bir yeniden koşu planlar; <code>--execute</code> onu kum havuzunda sınar.</td></tr>
-    <tr><td><code>verify</code></td><td>İzin, kaydedilen izin bayt bayt aynısı olup olmadığı. Kurcalama kanıtı, kurcalama koruması değil.</td></tr>
-    <tr><td><code>graph</code> / <code>export</code> / <code>ui</code></td><td>ASCII zaman çizelgesi · kendi kendine yeten HTML rapor veya OTLP · tarayıcı görünümü, yalnızca loopback.</td></tr>
-    <tr><td><code>bench</code></td><td>Motoru puanla: sentetik takım, hata enjeksiyonu, ya da dış etiketli bir korpus.</td></tr>
-    <tr><td><code>doctor</code> / <code>setup</code> / <code>config</code></td><td>Store sağlığı ve kimlik bilgileri · anahtarı OS anahtarlığına koyar · <code>runopsy.toml</code>.</td></tr>
-  </table>
-
-  <h3>Yapmayacağı şeyler</h3>
-  <ul>
-    <li>Doğrulamadığı bir nedeni iddia etmek.</li>
-    <li><code>--mode hybrid</code> olmadan herhangi bir yere bir şey göndermek.</li>
-    <li>Atılabilir bir kum havuzu dışında replay çalıştırmak ya da engellenen bir dış etki
-    üretmek — tanınmayan bir araç insan onayı gerektirir, kapalı tarafa düşerek.</li>
-    <li>Sağlıklı bir koşuda bulgu bildirmek. Yanlış pozitif oranı tam olarak sıfırdır.</li>
-  </ul>
-
-  <div class="foot">Sayfa 3 — kullanım</div>
-</section>
-
-<!-- ─────────────── SAYFA 4 ─────────────── -->
-<section class="page">
-  <h2>Teknoloji yığını ve her parçanın orada olma sebebi</h2>
-
-  <h3>Çekirdek kütüphaneler</h3>
-  <table>
-    <tr><th>Araç</th><th>Nedir</th><th>Neden burada</th></tr>
-    <tr><td>Python 3.12</td><td>Dil</td><td>Örüntü eşleme ve modern tipleme; ajan ekosistemi burada yaşıyor.</td></tr>
-    <tr><td>Pydantic v2</td><td>Doğrulamalı tipli modeller</td><td>İz şeması. Bozuk bir olay sınırda reddedilir, üç katman içeride değil.</td></tr>
-    <tr><td>DuckDB</td><td>Gömülü analitik veritabanı</td><td>Sunucusuz SQL. Türetilmiş veri — silinebilir ve yeniden kurulabilir.</td></tr>
-    <tr><td>Typer</td><td>CLI çatısı</td><td>Komut yüzeyi; yardım metni aynı imzalardan üretilir.</td></tr>
-    <tr><td>Rich</td><td>Terminal render</td><td>Teşhis görünümü için tablo, renk ve yerleşim.</td></tr>
-    <tr><td>NetworkX</td><td>Graf algoritmaları</td><td>Etki katmanı için iz grafında erişilebilirlik ve merkezilik.</td></tr>
-    <tr><td>orjson</td><td>Hızlı JSON</td><td>Journal serileştirme; sıralı anahtarlarla, böylece koşu hep aynı özeti verir.</td></tr>
-    <tr><td>httpx</td><td>HTTP istemcisi</td><td>Üründeki tek ağ çağrısı: isteğe bağlı anlamsal katman.</td></tr>
-    <tr><td>FastAPI + Uvicorn</td><td>Web çatısı ve sunucu</td><td><code>runopsy ui</code> arkasındaki loopback API.</td></tr>
-    <tr><td>OpenInference / OTel</td><td>İzleme sözleşmeleri</td><td>Dışa aktarım biçimi; teşhis edilmiş koşu Phoenix veya Langfuse'da açılır.</td></tr>
-    <tr><td>keyring</td><td>OS kimlik deposu</td><td>Sağlayıcı anahtarı Credential Manager'a ait, dosyaya değil.</td></tr>
-  </table>
-
-  <h3>Web görünümü</h3>
-  <p class="kv"><b>React + TypeScript + Vite</b> — arayüz ve derlemesi.
-  &nbsp;·&nbsp; <b>XYFlow</b> — 2D nedensel harita; düz kenarlar kayıt, kesikli kenarlar çıkarım.
-  &nbsp;·&nbsp; <b>Three.js / React Three Fiber</b> — isteğe bağlı 3D görünüm, tembel yüklenir,
-  böylece düğmeye basmayan kimse indirmez. &nbsp;·&nbsp; <b>Zustand, TanStack Query</b> —
-  durum ve veri çekme.</p>
-
-  <h3>Kalite kapısı — sürüm için hepsinin geçmesi şart</h3>
-  <table>
-    <tr><th>Araç</th><th>Neye karşı korur</th></tr>
-    <tr><td>pytest + Hypothesis</td><td>Gerilemeler; graf ve şema üzerinde özellik tabanlı testler.</td></tr>
-    <tr><td>Ruff</td><td>Lint ve biçimlendirme; tek araç, tartışmasız.</td></tr>
-    <tr><td>mypy</td><td>On paketin hepsinde tip hataları; liste sessizce daralmasın diye açıkça yazılır.</td></tr>
-    <tr><td>Bandit + Semgrep</td><td>Güvensiz subprocess kullanımı, enjeksiyon, gömülü kimlik bilgisi.</td></tr>
-    <tr><td>uv + hatchling</td><td>Tekrarlanabilir bağımlılık çözümü ve wheel derlemesi.</td></tr>
-    <tr><td>GitHub Actions</td><td>Yayından önce, üç platformda tüm kapı.</td></tr>
-  </table>
-
-  <h3>On bir paket</h3>
-  <p class="kv"><code>runopsy</code>, <code>pip install runopsy</code>'nin çözdüğü meta
-  dağıtımdır. Altında, bir kütüphane kullanıcısı tek parçaya bağımlı olabilsin diye:
-  <b>core</b> (şema, dedektörler, sıralama — yalnızca Pydantic ister) ·
-  <b>collector</b> (journal, indeks, vault, saklama) · <b>cli</b> ·
-  <b>replay</b> (checkpoint geri yükleme, karşı-olgusal yürütme) ·
-  <b>bench</b> (vakalar, metrikler, hata enjeksiyonu, dış kıyaslar) ·
-  <b>adapter</b> (shell + Hermes) · <b>semantic</b> (ücretli katman) ·
-  <b>server</b> (API + web görünümü) · <b>ui</b> (React) · <b>inspect</b> (Inspect AI logları).</p>
-  <p class="kv"><code>runopsy-core</code> asla runtime'a özgü kod import etmez — yalnızca
-  normalleştirilmiş grafı kabul eder. İkinci bir runtime adaptörünü mümkün kılan şey budur.</p>
-
-  <div class="foot">Sayfa 4 — teknoloji yığını</div>
-</section>
-
-<!-- ─────────────── SAYFA 5 ─────────────── -->
-<section class="page">
-  <h2>Burada "test edilmiş" ne demek</h2>
-
-  <h3>Test takımı — 916 test</h3>
-  <table>
-    <tr><th>Tür</th><th>Neyi kontrol eder</th></tr>
-    <tr><td>Birim ve özellik</td><td>Şema, dedektörler, sıralama, etki. Hypothesis, yazarın aklına gelmeyecek graflar üretir.</td></tr>
-    <tr><td>Entegrasyon</td><td>Gerçek kabuk komutları, gerçek çıkış kodları, gerçek zamanlama — kullanıcının aldığı adaptörle kaydedilir.</td></tr>
-    <tr><td>Gerçek git depoları</td><td>Repo yakalama ve checkpoint geri yükleme gerçek <code>git</code> ile koşar, taklitle değil. Ayrıştırıcıyla anlaşan bir taklit, yalnızca ikisini aynı kişinin yazdığını kanıtlar.</td></tr>
-    <tr><td>Eşzamanlılık</td><td>Tek store'a karşı 32 gerçek alt süreç. Sabitlediği kusur süreç içinde görünmüyordu.</td></tr>
-    <tr><td>İfade</td><td>Hiçbir çıktı yolunun doğrulanmamış bir bulgu için nedensellik iddia etmediği. Çökme ile aynı ağırlıkta bir kusur sayılır.</td></tr>
-    <tr><td>Paketleme</td><td>CI listesinin, belgelerin ve yayınlanan metadata'nın koddan geri kalmadığı.</td></tr>
-  </table>
-
-  <h3>Dört ölçüm — kötü gidenler dâhil</h3>
-  <table>
-    <tr><th>Kıyas</th><th>Ne ölçüyor</th><th class="num">Başlangıç top-1</th></tr>
-    <tr><td>Runopsy-Bench (20 sentetik)</td><td>Sıralama tasarlandığı gibi davranıyor mu</td><td class="num"><b>%94,4</b></td></tr>
-    <tr><td><i>— taban: son hatayı suçla</i></td><td><i>Log okumanın başardığı</i></td><td class="num">%22,2</td></tr>
-    <tr><td><b>Gerçek kayda</b> hata enjeksiyonu</td><td>Gerçek bir izde bilinen bir kırılmayı bulabiliyor mu</td><td class="num"><b>%100</b></td></tr>
-    <tr><td>TRAIL — uzman etiketli SWE-Bench izleri</td><td>Gerçek kodlama ajanlarında uzmanlarla aynı fikirde mi</td><td class="num"><b>%0,0</b></td></tr>
-    <tr><td>Who&amp;When — uzman etiketli çok-ajan</td><td>Aynısı, konuşma izlerinde</td><td class="num"><b>%0,0</b></td></tr>
+    <tr><th style="width:52mm">Ölçüm</th><th>Ne sınıyor</th><th class="num">İsabet</th></tr>
+    <tr><td>20 kurgulanmış koşu</td><td>Sıralama tasarlandığı gibi çalışıyor mu</td><td class="num"><b>%94,4</b></td></tr>
+    <tr><td><i>— karşılaştırma: son düşen adımı suçla</i></td><td><i>Logu aşağıdan okumanın başardığı</i></td><td class="num">%22,2</td></tr>
+    <tr><td><b>Gerçek bir kayda</b> bilerek hata yerleştirme</td><td>Gerçek bir koşuda bilinen bir kırılmayı bulabiliyor mu</td><td class="num"><b>%100</b></td></tr>
+    <tr><td>TRAIL — uzmanların elle etiketlediği gerçek ajan koşuları</td><td>Gerçek kodlama ajanlarında uzmanlarla aynı fikirde mi</td><td class="num"><b>%0,0</b></td></tr>
+    <tr><td>Who&amp;When — uzman etiketli çok-ajanlı koşular</td><td>Aynısı, sohbet biçimli koşularda</td><td class="num"><b>%0,0</b></td></tr>
   </table>
 
   <div class="note">
-    <b>Son ikisi neden yayınlanıyor.</b> Runopsy, <i>kendisi bir başarısızlık olan</i>
-    başlangıçları bulur — görünen belirtiden önce hata veren bir adım. TRAIL'de, 30
-    etiketli başlangıcın <i>hiçbiri</i> herhangi bir hata durumu taşımıyor: biçimlendirme
-    hataları, talimata uymama, bir dosya yolu hakkında yanlış varsayım. Deterministik
-    katmanlar çıkış kodu okur, dolayısıyla bunlara yapısal olarak kördür. %94,4 ile %0,0
-    aynı motoru farklı hata türlerinde tarif eder; yalnızca birincisini taşıyan bir sayfa
-    ölçmek değil satmak olurdu.
+    <b>O iki sıfır neden burada duruyor?</b> Çünkü aracın <i>nerede işe yaramadığını</i>
+    söylüyorlar, ve bunu sizin keşfetmeniz yerine yazmak daha dürüst.
+    <br><br>
+    Runopsy, <b>kendisi bir hata veren</b> adımları bulur — sayfa 1'deki örnekte adım 9
+    zaten hata kodu döndürmüştü. TRAIL'deki 30 koşuda ise uzmanların işaretlediği adımların
+    <b>hiçbiri hata vermemiş</b>: biri çıktıyı yanlış biçimde yazmış, biri talimatı
+    atlamış, biri dosya yolunu yanlış varsaymış. Hiçbiri "hata" olarak görünmüyor, sadece
+    <i>yanlış karar</i>. Runopsy'nin ücretsiz katmanları hata kodu okur, dolayısıyla bunları
+    yapısı gereği göremez. Dil modeli katmanı tam da bu durum için var.
   </div>
 
-  <h3>Dürüst sınırlar, 0.1.7 itibarıyla</h3>
+  <h3>"Test edilmiş" burada ne demek — 916 test</h3>
+  <table>
+    <tr><th style="width:40mm">Tür</th><th>Ne kontrol ediyor</th></tr>
+    <tr><td>Gerçek komutlar</td><td>Uydurma değil: gerçek terminal komutları çalıştırılıp gerçek çıkış kodları kaydediliyor.</td></tr>
+    <tr><td>Gerçek git depoları</td><td>Dosya değişikliği takibi sahte bir taklitle değil, gerçek <code>git</code> ile sınanıyor.</td></tr>
+    <tr><td>Aynı anda 32 süreç</td><td>Paralel kayıtta veri kaybı olmadığını kanıtlar. Bu kusur tek süreçte hiç görünmüyordu.</td></tr>
+    <tr><td>İfade kontrolü</td><td>Hiçbir çıktının, doğrulanmamış bir şey için "kesin sebep" dememesi. Çökme kadar ciddi bir kusur sayılıyor.</td></tr>
+    <tr><td>Sağlıklı koşu</td><td>Hiçbir sorunu olmayan bir koşuda <b>hiç</b> uyarı üretmemesi. Yanlış alarm oranı tam sıfır.</td></tr>
+  </table>
+
+  <h3>Bugün eksik olanlar</h3>
   <ul>
-    <li><b>On beş dedektörün yedisi</b> gerçek bir kayıtta ateşledi. Üçü hiç ateşleyemez —
-    mevcut hiçbir adaptörün üretmediği alan ya da olay türü isterler.</li>
-    <li><b>Tek canlı runtime adaptörü.</b> Mimari runtime'dan bağımsız; bunu şimdilik
-    yalnızca Hermes kanıtlıyor.</li>
-    <li><b>Kendimize ait korpus yok.</b> <code>runopsy label</code> var; korpus boş.
-    Doldurmak, gerçek hataları okuyan bir insan gerektirir — projenin içinden yapmak,
-    motoru kendi görüşüne karşı puanlamak olurdu.</li>
-    <li><b>Anlamsal yerelleştirme ölçülmedi.</b> TRAIL'i cevaplayabilecek katman henüz
-    onun üzerinde puanlanmadı.</li>
+    <li><b>15 kontrolün 7'si</b> gerçek bir kayıtta iş gördü. Üçü hiç göremez — mevcut
+    ajanların hiç üretmediği bilgiye bakıyorlar.</li>
+    <li><b>Tek ajan desteği</b> (Hermes). Mimari başkalarına açık, ama şimdilik bir tane var.</li>
+    <li><b>Kendi etiketli koşu arşivimiz yok.</b> Bunu doldurmak, gerçek hataları okuyup
+    "burada başlamış" diyen bir insan gerektirir. Projenin kendi içinden yapmak, aracı
+    kendi görüşüne göre notlandırmak olurdu.</li>
+    <li><b>Dil modeli katmanı ölçülmedi.</b> TRAIL'i cevaplayabilecek tek katman o, ama
+    henüz onun üzerinde puanlanmadı.</li>
   </ul>
 
-  <h3>Sırada ne var</h3>
-  <p class="kv">1. Daha çok gerçek koşu kaydet — enjeksiyon dışındaki her başlık rakam hâlâ
-  projenin kendi yazdığı izlerden geliyor. &nbsp;2. Anlamsal katmanı TRAIL üzerinde puanla;
-  deterministik motorun tasarımı gereği kaçırdığı vaka orası. &nbsp;3.
-  <code>retry_storm</code>'a ateşleyebileceği gerçek bir şey ver, ya da kaldır. &nbsp;4.
-  İkinci bir canlı runtime adaptörü.</p>
+  <h3>Özet</h3>
+  <p class="lede">Ajanınız bir işi beceremediğinde, Runopsy size <b>nereye bakmanız
+  gerektiğini</b> söyler, <b>neden öyle düşündüğünü</b> gösterir, ve <b>haklı olup
+  olmadığını sınamayı</b> teklif eder. Bilmediği şeyi bilmiyor der — ve nerede işe
+  yaramadığını da yazar.</p>
 
-  <div class="foot">Sayfa 5 — kanıt ve sınırlar · Vahit Feryad · ORCID 0000-0002-3282-339X
+  <div class="foot">Sayfa 5 — güven ve sınırlar · Vahit Feryad · ORCID 0000-0002-3282-339X
   &nbsp;·&nbsp; İngilizce aslından çeviri</div>
 </section>
