@@ -60,12 +60,25 @@ runopsy evidence latest --step 9        # the command, the output, why it was fl
 runopsy ui                   # timeline and failure map in a browser, loopback only
 ```
 
-Driving an agent and diagnosing it in one command:
+Driving a coding agent and diagnosing it, in two commands:
 
 ```bash
-runopsy adapter hermes       # prints the config block to paste
+pip install 'runopsy[hermes]'   # Runopsy plus the supported agent
+runopsy init                    # wires the agent up, then checks that it took
+
 runopsy run "fix the failing test"
 ```
+
+Quote the extra: square brackets are glob characters in zsh, the default shell on macOS.
+
+`runopsy init` writes the hook configuration, installs the plugin that carries token
+usage, and then verifies the runtime really is wired — a half-configured setup records
+nothing while every session looks completely normal. It backs up what was there, refuses
+a config it cannot parse, and leaves your comments and formatting alone. If you would
+rather do it by hand, `runopsy adapter hermes` still prints the block to paste.
+
+The agent brings its own model key, in its own config; Runopsy never sees it. Runopsy
+itself needs no key at all — see *Keys* below.
 
 ## What it is, and is not
 

@@ -90,6 +90,31 @@ Six sessions are still not a corpus. All of them ran one model — `openai/gpt-4
 
 To record more: install `hermes-agent` in its own venv, write the block that `runopsy adapter hermes` prints into the path `hermes config path` reports, then run with `RUNOPSY_HOME` set and `--accept-hooks`. Paste the generated block rather than hand-writing it: the whole `<command> <event>` string is one YAML scalar, and quoting only the path — `command: "C:/x/runopsy" hook post_tool_call` — makes Hermes discard the entire config, run with defaults and record nothing, while looking like a completely normal session.
 
+**Setup is one command now, and that was the largest adoption gap.** Getting from
+`pip install` to a recorded run took four steps across two tools, and the paste step has
+a failure mode that looks like success: quoting only the path makes Hermes discard its
+entire config and record nothing. `runopsy init` writes the hooks, installs and enables
+the plugin, and then *verifies* — the check is the point, because a half-configured setup
+is invisible. `pip install 'runopsy[hermes]'` brings the agent along; it stays an extra
+and never a dependency, because requiring a particular runtime is exactly what the engine
+is built not to do. Writing another tool's config is opt-in and reversible: a config that
+will not parse is refused rather than overwritten, the previous contents are copied aside,
+and where there is no `hooks:` section the block is appended as text so comments and
+formatting survive byte-for-byte. `adapter hermes` still prints the block by default.
+
+Quote the extra in anything a user copies. `pip install runopsy[hermes]` fails in zsh —
+the default shell on macOS — before pip is reached, and reads as "this package does not
+exist".
+
+**Recording overhead was measured, and deliberately not "fixed".** One process per agent
+step costs ~3.6s on the development machine, of which only 642ms is import a recorder does
+not need; the rest is interpreter startup and Pydantic schema construction, which a
+subprocess per event cannot avoid. Making `runopsy_bench` lazy was tried, came back as
+noise (2,727 → 2,758ms) because its cost is `runopsy_core` which the recorder needs
+anyway, and was reverted. The remedy is batching or a resident recorder — a design change,
+not a setting. Numbers in `HANDOFF.md` §10. Note the machine: bare Python startup here is
+448ms against roughly 30ms on a typical one, so re-measure before treating this as urgent.
+
 **Keep this section true.** It is the first thing read and the easiest thing to leave stale; a wrong "not built yet" costs a future session real time. If a change ships a capability listed here as missing, move it in the same commit.
 
 Measured onset localization, reproducible via `runopsy bench --compare` and recorded in `benchmarks/baseline-report.md`: top-1 94.4%, top-3 100%, mean step distance 0.11, zero false positives — against 22.2% for blaming the last failing step, which is what reading a log bottom-up achieves.
@@ -98,7 +123,7 @@ Measured onset localization, reproducible via `runopsy bench --compare` and reco
 
 ```bash
 uv sync                       # install; pins Python 3.12 via .python-version
-uv run pytest                 # ~905 tests, ~260s; coverage gate is 85%
+uv run pytest                 # ~931 tests, ~260s; coverage gate is 85%
 uv run pytest tests/test_diagnose.py::TestConfidence   # one class
 uv run ruff check . && uv run ruff format .
 # Every package, named explicitly: the CI matrix runs bash and PowerShell, and
@@ -310,7 +335,8 @@ runopsy bench [--compare] [--corpus DIR] [--inject [--store DIR]] [--perf] [--wr
 runopsy setup                                            # key to the OS keyring
 runopsy doctor
 runopsy config [--init]
-runopsy adapter hermes [config|status]                   # paste, or check it took
+runopsy init                                             # wire a runtime up, end to end
+runopsy adapter hermes [config|install|status|plugin]     # paste, write, or check it took
 runopsy hook                                             # called by Hermes, not by hand
 ```
 
