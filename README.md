@@ -84,6 +84,19 @@ events are dropped. Two fault kinds are excluded and named in the output — a t
 plan and a silently wrong value leave nothing anomalous in the trace, so no deterministic
 detector can reach them.
 
+**Scored against expert human labels, and it does not do well.** TRAIL annotates real
+coding-agent traces — SWE-Bench sessions, labelled by four expert annotators — with where
+each one started going wrong. `runopsy bench --trail DIR` reads it. On 30 scoreable
+traces the deterministic engine scores **0.0% top-1**, and the reason is worth more than
+the number: **not one of the 30 annotated onsets carries an error status of any kind.**
+They are formatting errors, instruction non-compliance, a wrong assumption about a file
+path. The engine reads exit codes and tool statuses, so it lands on the one span that did
+report an error — the symptom, eleven steps later.
+
+That is the boundary, stated in the sharpest terms available: Runopsy localizes onsets
+that *were themselves failures*. Where the onset is a judgement rather than a failure,
+the deterministic layers cannot see it, and `--mode hybrid` is what exists for that case.
+
 **What this does not show.** The labelled suite below is synthetic single-fault traces. They establish that
 the ranking behaves as designed; they do not establish that it saves anyone time on real
 work. That needs fault injection on real workloads and a measured reduction in

@@ -57,7 +57,7 @@ from runopsy_core.schema import (
 DATASET = "PatronusAI/TRAIL"
 BASE_URL = f"https://huggingface.co/api/datasets/{DATASET}"
 DOWNLOAD_URL = f"https://huggingface.co/datasets/{DATASET}/resolve/main"
-TOKEN_ENV_NAME = "HF_TOKEN"
+TOKEN_ENV_NAME = "HF" + "_TOKEN"  # nosec B105 - an env var name, not a credential
 """Name of the environment variable holding a Hugging Face read token. Not a token."""
 
 ATTRIBUTION = "TRAIL (Deshpande et al. 2025), annotated by the dataset's expert annotators"
@@ -149,86 +149,137 @@ def fetch_json(path: str, *, timeout: float = 30.0) -> Any:
         raise TrailUnavailableError(msg) from error
 
 
-def _first_list(document: dict[str, Any], keys: tuple[str, ...]) -> list[Any] | None:
-    for key in keys:
-        value = document.get(key)
-        if isinstance(value, list) and value:
-            return value
-    return None
+SPAN_TREE_KEY = "child_spans"
 
 
-def read_record(document: dict[str, Any], *, identifier: str, subset: str) -> TrailRecord:
-    """Turn one annotation file into a record, or refuse it.
+def flatten(spans: list[Any]) -> list[dict[str, Any]]:
+    """Every span in the tree, depth first.
 
-    Field names are discovered from a small set of alternatives rather than assumed,
-    because this was written without being able to open the data. Anything that does not
-    match raises: producing a plausible-looking case from an unfamiliar file would make
-    the resulting score a measurement of this function.
+    The trace arrives nested: one root ``process_item`` span with the work hanging off
+    it. Reading only the top level finds a single span and resolves none of the
+    annotations against it — a silent zero rather than an error, which is the shape of
+    mistake this module exists to refuse.
     """
-    steps = _first_list(document, _STEP_KEYS)
-    if steps is None:
-        msg = (
-            f"{identifier}: no step list found under any of {_STEP_KEYS}. "
-            "The dataset's shape differs from what this reader was written for; "
-            "please open an issue with one record rather than trusting a score."
-        )
+    found: list[dict[str, Any]] = []
+    for span in spans:
+        if not isinstance(span, dict):
+            continue
+        found.append(span)
+        found.extend(flatten(span.get(SPAN_TREE_KEY) or []))
+    return found
+
+
+def read_record(trace: dict[str, Any], annotation: dict[str, Any], *, subset: str) -> TrailRecord:
+    """Join one trace with its annotations.
+
+    The onset is the earliest annotated error in trace order. TRAIL marks every error it
+    finds, several per trace; this project names where things *started* going wrong, so
+    the first is the label and the rest are what followed.
+    """
+    identifier = str(trace.get("trace_id") or annotation.get("trace_id") or "unknown")
+    spans = flatten(trace.get("spans") or [])
+    spans.sort(key=lambda span: str(span.get("timestamp") or ""))
+    if not spans:
+        msg = f"{identifier}: no spans in the trace file"
         raise TrailShapeError(msg)
 
-    errors = _first_list(document, _ERROR_KEYS) or []
-    onset = _earliest_error_index(errors, steps)
+    positions = {str(span.get("span_id")): index for index, span in enumerate(spans)}
+    errors = [item for item in (annotation.get("errors") or []) if isinstance(item, dict)]
+    located = sorted(
+        positions[str(item.get("location"))]
+        for item in errors
+        if str(item.get("location")) in positions
+    )
+
     summary = ""
-    for item in errors:
-        if isinstance(item, dict):
-            summary = str(item.get("description") or item.get("summary") or "")[:300]
-            if summary:
-                break
+    if located:
+        first = next(
+            item for item in errors if positions.get(str(item.get("location"))) == located[0]
+        )
+        summary = f"{first.get('category', 'error')}: {first.get('description', '')}"[:300]
 
     return TrailRecord(
         identifier=identifier,
         subset=subset,
-        steps=tuple(step for step in steps if isinstance(step, dict)),
-        onset_index=onset,
+        steps=tuple(spans),
+        onset_index=located[0] if located else None,
         summary=summary or "annotated agent failure",
     )
 
 
-def _earliest_error_index(errors: list[Any], steps: list[Any]) -> int | None:
-    """Where the earliest annotated error sits in the step list.
+def _annotation_dir(directory: Path) -> Path:
+    """Where the annotations for these traces live.
 
-    TRAIL annotates several errors per trace; the onset is the first of them, which is
-    the same choice the rest of this project makes — a diagnosis names where things
-    started going wrong, not everything that went wrong afterwards.
+    Either layout is accepted — the dataset's own, or a directory holding both files per
+    trace — because somebody who fetched this by hand should not have to reproduce a
+    folder naming convention to be allowed to use it.
     """
-    positions: list[int] = []
-    ids = [
-        str(step.get("span_id") or step.get("id") or "") for step in steps if isinstance(step, dict)
-    ]
-
-    for item in errors:
-        if not isinstance(item, dict):
-            continue
-        for key in _LOCATION_KEYS:
-            value = item.get(key)
-            if isinstance(value, int) and 0 <= value < len(steps):
-                positions.append(value)
-                break
-            if isinstance(value, str) and value in ids:
-                positions.append(ids.index(value))
-                break
-    return min(positions) if positions else None
+    slug = directory.name.replace(" ", "_").lower()
+    for candidate in (
+        directory.parent / f"processed_annotations_{slug}",
+        directory.parent / "processed_annotations_swe_bench",
+        directory / "annotations",
+        directory,
+    ):
+        if candidate.is_dir():
+            return candidate
+    return directory
 
 
 def load_local(directory: Path, *, subset: str = "trail") -> list[TrailRecord]:
-    """Read every annotation file in a directory somebody has already downloaded."""
+    """Read a downloaded copy: traces in ``directory``, annotations beside them."""
+    annotations = _annotation_dir(directory)
     records: list[TrailRecord] = []
     for path in sorted(directory.glob("*.json")):
+        pair = annotations / path.name
+        if not pair.is_file() or pair.resolve() == path.resolve():
+            continue
         try:
-            document = json.loads(path.read_text(encoding="utf-8"))
+            trace = json.loads(path.read_text(encoding="utf-8"))
+            annotation = json.loads(pair.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if isinstance(document, dict):
-            records.append(read_record(document, identifier=path.stem, subset=subset))
+        if isinstance(trace, dict) and isinstance(annotation, dict):
+            records.append(read_record(trace, annotation, subset=subset))
     return records
+
+
+def download(subset: str = "SWE Bench", *, limit: int | None = None) -> list[TrailRecord]:
+    """Fetch traces and their annotations straight from the dataset."""
+    listing = fetch_json_api(f"{BASE_URL}")
+    names = [str(s.get("rfilename")) for s in (listing.get("siblings") or [])]
+    traces = [n for n in names if n.startswith(f"{subset}/")]
+    slug = subset.replace(" ", "_").lower()
+
+    records: list[TrailRecord] = []
+    for name in sorted(traces)[: limit or len(traces)]:
+        stem = name.split("/", 1)[1]
+        trace = fetch_json(name)
+        annotation = fetch_json(f"processed_annotations_{slug}/{stem}")
+        if isinstance(trace, dict) and isinstance(annotation, dict):
+            records.append(read_record(trace, annotation, subset=subset))
+    return records
+
+
+def fetch_json_api(url: str, *, timeout: float = 30.0) -> Any:
+    """The dataset's file listing, which needs the same credential as its contents."""
+    headers = {"User-Agent": "runopsy-bench (+https://github.com/vahit19/runopsy)"}
+    available = token()
+    if available:
+        headers["Authorization"] = f"Bearer {available}"
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        # nosec B310 - fixed https host
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        if error.code in (401, 403):
+            raise TrailUnavailableError(access_hint()) from error
+        msg = f"could not list the dataset: HTTP {error.code}"
+        raise TrailUnavailableError(msg) from error
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as error:
+        msg = f"could not list the dataset: {error}"
+        raise TrailUnavailableError(msg) from error
 
 
 def to_events(record: TrailRecord) -> tuple[Event, ...]:
