@@ -20,7 +20,7 @@ authors:
     city: Istanbul
     country: TR
 license: Apache-2.0
-version: 0.1.8
+version: 0.1.9
 date-released: "2026-08-03"
 repository-code: "https://github.com/vahit19/runopsy"
 keywords:

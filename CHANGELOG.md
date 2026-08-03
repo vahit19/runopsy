@@ -5,6 +5,19 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.9] — 2026-08-03
+
+Documentation only; no code change since 0.1.8.
+
+### Fixed
+
+- The PyPI project page still walked a new user through the four-step setup that
+  `runopsy init` replaced, and printed the install command unquoted so it fails in zsh.
+  0.1.8 was published before the README caught up, and PyPI will not accept a second
+  upload of a version — so correcting the page a first-time user lands on takes a
+  release of its own. That page is the product's first impression; leaving it describing
+  a superseded setup would undo the work 0.1.8 shipped.
+
 ## [0.1.8] — 2026-08-03
 
 ### Added
