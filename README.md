@@ -102,6 +102,10 @@ the ranking behaves as designed; they do not establish that it saves anyone time
 work. That needs fault injection on real workloads and a measured reduction in
 time-to-diagnosis. The full report, including the cases the engine still misses and the
 failures it cannot see at all, is in [`benchmarks/baseline-report.md`](benchmarks/baseline-report.md).
+The suite itself is published as
+[`renderfy/runopsy-bench`](https://huggingface.co/datasets/renderfy/runopsy-bench) —
+with a card that says plainly that it is synthetic, and carries the 0.0% results next
+to the 94.4%.
 
 How much that gap matters is not a guess. The first real agent session recorded — a live
 Hermes run fixing an ordinary bug — broke the engine in a way none of the twenty cases
