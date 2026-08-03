@@ -1,6 +1,6 @@
 [project]
 name = "runopsy-server"
-version = "0.1.6"
+version = "0.1.7"
 description = "Local read-mostly HTTP API over a Runopsy store"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,10 +21,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "runopsy-core==0.1.6",
-    "runopsy-collector==0.1.6",
-    "runopsy-replay==0.1.6",
-    "runopsy-cli==0.1.6",
+    "runopsy-core==0.1.7",
+    "runopsy-collector==0.1.7",
+    "runopsy-replay==0.1.7",
+    "runopsy-cli==0.1.7",
     "fastapi>=0.115",
     "uvicorn>=0.30",
 ]

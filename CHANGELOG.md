@@ -5,6 +5,29 @@ and the project uses semantic versioning once published.
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-08-03
+
+**Fixed — the PyPI page was a stub.** Somebody went looking for a project page like
+numpy's, found three lines, and concluded there wasn't one. The distribution was
+published; the page was almost empty, and nothing in a source checkout shows that. It now
+carries what a stranger needs: what the problem is, what the output looks like, install
+and quick start, what the tool will not do, the package map — and all four measurements,
+including the two that go badly.
+
+**Added — TRAIL, read against the real data.** Access was granted, so the reader is
+written against the dataset instead of its description. Two files make one case, joined
+by trace_id, and the spans arrive as a *tree*: a reader taking the top level at face value
+finds one span and resolves none of the eight annotations against it, which is a silent
+zero that looks exactly like a real score.
+
+**Measured: 0.0% top-1 on 30 expert-labelled SWE-Bench traces**, and the reason matters
+more than the number — **not one of the 30 annotated onsets carries an error status of any
+kind.** They are formatting mistakes, instruction non-compliance, a wrong assumption about
+a file path. This engine reads exit codes and statuses, so on the first trace it names the
+one span that did report an error, eleven steps after the annotators' onset. That is the
+sharpest statement of scope this project has: it localizes onsets that were themselves
+failures.
+
 ## [0.1.6] — 2026-08-03
 
 **Added — a reader for TRAIL.** The corpus this project has always been missing is

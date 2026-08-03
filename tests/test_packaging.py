@@ -260,3 +260,52 @@ class TestTheGatesCannotBeSkippedByAccident:
 
         assert "environment: pypi-${{ matrix.package }}" in release
         assert release.count(f"- {package}\n") == 1
+
+
+class TestThePageSomebodyLandsOn:
+    """What pypi.org/project/runopsy renders.
+
+    A published package whose page is three lines looks abandoned, and the first person
+    to look for this one said exactly that: they went hunting for a page like numpy's and
+    concluded there wasn't one. The distribution existed; the page was a stub. Nothing in
+    a source checkout shows this, which is why it needs a test.
+    """
+
+    def page(self) -> str:
+        return (ROOT / "packages" / "runopsy" / "README.md").read_text(encoding="utf-8")
+
+    def test_the_front_door_is_not_a_stub(self) -> None:
+        assert len(self.page()) > 4000, "the meta-package page is too thin to be useful"
+
+    def test_it_tells_a_stranger_how_to_install_and_start(self) -> None:
+        text = self.page()
+
+        assert "pip install runopsy" in text
+        assert "runopsy demo" in text
+
+    def test_it_shows_what_the_output_looks_like(self) -> None:
+        """Somebody deciding whether to install this should see it working first."""
+        text = self.page()
+
+        assert "Suspected onset" in text
+        assert "Observed failure" in text
+
+    def test_it_publishes_the_measurements_that_go_badly(self) -> None:
+        """The numbers that flatter this project are not the only ones on its page.
+
+        A page carrying 94.4% and nothing else would be selling. Carrying the 0.0% next
+        to it is the difference between a claim and a measurement.
+        """
+        text = self.page()
+
+        assert "94.4%" in text
+        assert "0.0%" in text
+        assert "TRAIL" in text
+
+    def test_the_metadata_actually_points_at_it(self) -> None:
+        """A README nobody wired into the manifest is a file, not a page."""
+        manifest = tomllib.loads(
+            (ROOT / "packages" / "runopsy" / "pyproject.toml").read_text(encoding="utf-8")
+        )
+
+        assert manifest["project"]["readme"] == "README.md"
