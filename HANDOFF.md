@@ -6,7 +6,7 @@ How to pick this project up on another machine, and what is true about it today.
 operational companion: where things live, what exists *outside* the repository, and what
 was learned the hard way. Read both.
 
-**Last updated: 3 August 2026, at `v0.1.7`.**
+**Last updated: 3 August 2026, at `v0.1.8`.**
 
 ---
 
@@ -23,8 +23,8 @@ optional thing, `--mode hybrid`.
 
 | what | where |
 | --- | --- |
-| Source | https://github.com/vahit19/runopsy — `main`, tagged `v0.1.7` |
-| PyPI | https://pypi.org/project/runopsy/ — 10 distributions, all at 0.1.7 |
+| Source | https://github.com/vahit19/runopsy — `main`, tagged `v0.1.8` |
+| PyPI | https://pypi.org/project/runopsy/ — 10 distributions, all at 0.1.8 |
 | Hugging Face | https://huggingface.co/datasets/renderfy/runopsy-bench |
 | HF account | `renderfy` |
 | Local repo | `C:\Users\vahit.feryad\Documents\GenAI\misc\uygulamalar\runopsy_codebase` |

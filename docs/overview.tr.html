@@ -296,10 +296,13 @@ runopsy ui                           <span class="d"># tarayıcıda görsel zama
   varsa ajana hiç ihtiyacınız yok.</p>
 
   <h3>Yol C — gerçek bir kodlama ajanıyla (iki komut)</h3>
-  <div class="screen">pip install runopsy[hermes]     <span class="d"># Runopsy + ajan, tek kurulum</span>
+  <div class="screen">pip install 'runopsy[hermes]'     <span class="d"># Runopsy + ajan, tek kurulum</span>
 runopsy init                    <span class="d"># hepsini bağlar ve bağlandığını doğrular</span>
 
 runopsy run "ödeme servisindeki düşen testi düzelt"</div>
+  <p class="kv">Tırnaklar önemli: köşe parantez macOS'un varsayılan kabuğunda (zsh)
+  özel bir karakterdir ve tırnaksız komut <code>no matches found</code> ile pip'e hiç
+  ulaşmadan düşer.</p>
   <p class="kv"><code>init</code> kancaları Hermes'in ayar dosyasına yazar, jeton
   sayımını taşıyan eklentiyi kurar ve etkinleştirir, sonra <b>gerçekten bağlandı mı diye
   kendi işini kontrol eder</b> — bozuk bir kurulumun görünmez olması bu kontrolün var
@@ -567,7 +570,7 @@ demo · 16 olay · başarısız</span>
   <h3>Dış dünyayla bağlantılar</h3>
   <table>
     <tr><td style="width:34mm"><b>Hermes Agent</b></td><td>Desteklenen kodlama ajanı. Bağımlılık değil — ayrı kurulur, hook'larla bağlanır.</td></tr>
-    <tr><td><b>Inspect AI</b></td><td>Yaygın bir değerlendirme çatısı. <code>runopsy-inspect</code> paketi onun ürettiği kayıt dosyalarını okuyup Runopsy koşusuna çevirir; böylece orada koşturulmuş görevler de teşhis edilebilir. İsteğe bağlı: <code>pip install runopsy[inspect]</code>.</td></tr>
+    <tr><td><b>Inspect AI</b></td><td>Yaygın bir değerlendirme çatısı. <code>runopsy-inspect</code> paketi onun ürettiği kayıt dosyalarını okuyup Runopsy koşusuna çevirir; böylece orada koşturulmuş görevler de teşhis edilebilir. İsteğe bağlı: <code>pip install 'runopsy[inspect]'</code>.</td></tr>
     <tr><td><b>OpenRouter</b></td><td>İsteğe bağlı model sağlayıcı (kendi anahtarınızla). Yalnızca <code>--mode hybrid</code> için.</td></tr>
     <tr><td><b>Ollama / llama.cpp</b></td><td>Yerel model çalıştırıcıları. Anahtar istemeden, makineden hiçbir şey çıkmadan aynı kademeyi kullanmanızı sağlar.</td></tr>
   </table>
