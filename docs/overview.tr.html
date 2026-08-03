@@ -228,16 +228,21 @@
     <tr><th style="width:46mm">Ölçüm</th><th class="num">Süre</th></tr>
     <tr><td>Adım başına kayıt süreci (bu makinede)</td><td class="num"><b>~3,6 sn</b></td></tr>
     <tr><td><i>— bunun içinde: boş Python başlatma</i></td><td class="num">0,4 sn</td></tr>
-    <tr><td><i>— bunun içinde: kütüphane yükleme (DuckDB, Typer, şema)</i></td><td class="num">~2,7 sn</td></tr>
+    <tr><td><i>— bunun içinde: kaydedicinin kaçınamayacağı yükleme</i></td><td class="num">~1,6 sn</td></tr>
+    <tr><td><i>— bunun içinde: kaydedicinin ihtiyacı olmayan yükleme</i></td><td class="num">~0,6 sn</td></tr>
     <tr><td>Süreç içi kayıt hızı (toplu)</td><td class="num">4.858 olay/sn</td></tr>
     <tr><td>10.000 adımlık bir koşunun tam teşhisi</td><td class="num">~0,5 sn</td></tr>
   </table>
   <div class="note">
-    Zamanın neredeyse tamamı iş yapmaya değil <b>kütüphane yüklemeye</b> gidiyor: kayıt
-    işleminin kendisi saniyede binlerce olay işleyebiliyor. Bu, tasarımın gereği değil
-    giderilebilir bir maliyettir — kancanın yaptığı iş yalnızca deftere bir satır eklemek
-    olduğundan veritabanı katmanını hiç yüklemesi gerekmez. <b>Bugünkü rakam budur ve
-    burada yazmaktadır</b>; makineye göre değişir, ve düşürülmesi açık bir iş kalemidir.
+    Zamanın neredeyse tamamı iş yapmaya değil <b>süreç başlatmaya</b> gidiyor: kaydın
+    kendisi saniyede binlerce olay işleyebiliyor. Ölçüm, ne kadarının giderilebilir
+    olduğunu da söylüyor — kancanın ihtiyaç duymadığı kütüphaneleri atlamak en fazla
+    <b>0,6 saniye</b> kazandırıyor; kalan 2,1 saniye Python'un başlaması ve veri şemasının
+    kurulmasıdır, ve adım başına ayrı süreç açan bir tasarımda bundan kaçınılamaz. Yani
+    bu bir ayar meselesi değil: gerçek çözüm ya olayları toplu yazmak ya da kalıcı bir
+    kaydedici süreç kullanmaktır. <b>Bugünkü rakam budur ve burada yazmaktadır</b>;
+    makineye çok bağlıdır — bu makinede boş Python başlatma bile 0,45 saniye sürüyor,
+    tipik bir makinede bunun onda biri.
   </div>
 
   <h3>Peki auto mode'lu asistanların yanında ne işe yarıyor?</h3>
@@ -617,8 +622,10 @@ demo · 16 olay · başarısız</span>
 
   <h3>Bugün eksik olanlar</h3>
   <ul>
-    <li><b>Kayıt genel gideri yüksek.</b> Adım başına ayrı süreç, bu makinede ~3,6 saniye
-    ve neredeyse tamamı kütüphane yükleme. Giderilebilir; bugün öyle değil (sayfa 3).</li>
+    <li><b>Kayıt genel gideri yüksek.</b> Adım başına ayrı süreç, bu makinede ~3,6 saniye.
+    Ölçüldü: import budaması bunun yalnızca 0,6 saniyesini kurtarır, gerisi süreç başlatmanın
+    kendisidir. Çözümü toplu yazma ya da kalıcı kaydedici — yani bir tasarım değişikliği,
+    ayar değil (sayfa 3).</li>
     <li><b>15 kontrolün 7'si</b> gerçek bir kayıtta iş gördü. Üçü, bugünkü ajanların hiç
     üretmediği bilgiye baktığı için hiç göremez.</li>
     <li><b>Tek desteklenen ajan</b> (Hermes). Mimari başkalarına açık, ama bugün bir tane var.</li>

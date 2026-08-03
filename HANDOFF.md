@@ -220,3 +220,33 @@ with `--refresh`; it resolves.
 
 Authored by Vahit Feryad (ORCID 0000-0002-3282-339X). Commits carry no AI co-author
 trailers, deliberately — see `CLAUDE.md`.
+
+## 10. Hook overhead: measured, and why it was not "fixed"
+
+Recording spawns one process per agent step. On the development machine that costs
+**~3.6s per event**, which for a 40-step session is 2.5 minutes of pure latency.
+
+The obvious fix — route `runopsy hook` around `main.py` so it stops importing Typer,
+Rich, the benchmark suite, the detector registry and DuckDB — was measured before being
+built, and it is not worth it:
+
+| | ms |
+| --- | ---: |
+| bare Python startup | 448 |
+| what a recorder cannot avoid importing (Pydantic schema, adapter, journal) | 2,065 |
+| full CLI surface | 2,707 |
+| **most a fast path could save** | **642** |
+
+18% of the cost, in exchange for a second code path through the one component whose
+first duty is not to break the run it observes. Making `runopsy_bench` lazy was tried
+and measured at 2,727 → 2,758 ms — noise, because its cost is `runopsy_core`, which the
+recorder needs anyway. Reverted rather than shipped.
+
+The floor is interpreter startup plus Pydantic model construction, and no amount of
+import trimming removes it from a per-event subprocess. The real options are
+architectural: batch several events per invocation, or keep a resident recorder the hook
+talks to. Both are design changes and neither should be done as a tweak.
+
+Note the machine matters enormously: bare Python startup here is 448 ms against roughly
+30 ms on a typical machine, so the same session elsewhere likely costs ~350 ms per step.
+Re-measure before deciding this is urgent.
