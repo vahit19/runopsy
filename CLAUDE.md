@@ -136,7 +136,9 @@ Write commit messages that explain why a change was made, not what the diff show
 
 **The product ships in English.** It targets a global open-source audience, so everything a user or contributor can see is written in English: CLI help and output, TUI and web UI copy, error and diagnosis messages, README and `docs/`, code comments, identifiers, schema field names, commit messages, issue templates, and release notes. No Turkish strings in shipped artifacts.
 
-The design PDF is Turkish and the repository owner writes in Turkish — that applies to conversation only, never to committed content. Translate concepts from the PDF into English terminology rather than transliterating (e.g. "aday başlangıç" → *suspected onset*, "yayılım" → *propagation*, "kanıt" → *evidence*).
+The design PDF is Turkish and the repository owner writes in Turkish — that applies to conversation only, never to committed content.
+
+**One deliberate exception**, so nobody "fixes" it later: `Runopsy-overview.tr.pdf` and its source `docs/overview.tr.html` are a Turkish translation of the English overview, kept for the owner. The rule this exception does not touch is the one that matters: no Turkish inside an English artifact — not in CLI output, error messages, the README, code or commits. A separately named translation adds a reader without taking anything from the global audience, and its footer says the English original is the technical source of truth. Regenerate both with `cd packages/runopsy-ui && npm run overview` and `npm run overview -- tr`. Translate concepts from the PDF into English terminology rather than transliterating (e.g. "aday başlangıç" → *suspected onset*, "yayılım" → *propagation*, "kanıt" → *evidence*).
 
 Keep user-facing strings out of scattered f-strings where practical, so localization stays possible later without a rewrite. Localization itself is not in MVP scope.
 

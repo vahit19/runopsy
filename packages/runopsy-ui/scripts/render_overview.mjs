@@ -14,8 +14,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
-const SOURCE = resolve(ROOT, "docs", "overview.html");
-const OUT = resolve(ROOT, "Runopsy-overview.pdf");
+// One argument picks the language: no argument renders the English original, "tr"
+// renders the owner's translated copy. The English one is the customer-facing artifact
+// and the source of truth; the translation carries a footer saying so.
+const LANG = process.argv[2] ?? "en";
+const SOURCE = resolve(ROOT, "docs", LANG === "en" ? "overview.html" : `overview.${LANG}.html`);
+const OUT = resolve(ROOT, LANG === "en" ? "Runopsy-overview.pdf" : `Runopsy-overview.${LANG}.pdf`);
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
