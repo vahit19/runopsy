@@ -34,7 +34,13 @@ dependencies = [
 # Reading Inspect AI eval logs. Separate because inspect-ai is a large dependency
 # that most users of the CLI will never touch.
 inspect = ["runopsy-inspect==0.1.7"]
-all = ["runopsy-inspect==0.1.7"]
+# The supported coding agent, so `pip install runopsy[hermes]` is one command instead of
+# two. Deliberately an extra and never a hard dependency: Runopsy analyses a normalized
+# trace and must not require any particular runtime to exist, which is the same rule that
+# makes a second adapter possible. Unpinned because Hermes is somebody else's release
+# schedule; the adapter is verified against 0.19.0.
+hermes = ["hermes-agent"]
+all = ["runopsy-inspect==0.1.7", "hermes-agent"]
 
 [project.urls]
 Homepage = "https://github.com/vahit19/runopsy"

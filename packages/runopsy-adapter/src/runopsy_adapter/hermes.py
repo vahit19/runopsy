@@ -451,3 +451,162 @@ def hooks_config_block(command: str) -> str:
         lines.append(f"    - command: '{invocation}'")
         lines.append("      timeout: 10")
     return "\n".join(lines) + "\n"
+
+
+@dataclass(frozen=True)
+class HookInstall:
+    """What ``install_hooks`` actually did, so the caller can report it honestly."""
+
+    config_path: Path
+    backup_path: Path | None
+    created_config: bool
+    rewrote_file: bool
+    added: tuple[str, ...]
+    already_present: tuple[str, ...]
+
+
+def _backup_beside(path: Path) -> Path:
+    """Copy ``path`` aside under a name that never overwrites an earlier backup.
+
+    Numbered rather than timestamped so the same input always produces the same name,
+    which keeps this testable without freezing a clock.
+    """
+    candidate = path.with_suffix(path.suffix + ".runopsy-backup")
+    counter = 1
+    while candidate.exists():
+        candidate = path.with_suffix(f"{path.suffix}.runopsy-backup.{counter}")
+        counter += 1
+    shutil.copy2(path, candidate)
+    return candidate
+
+
+def install_hooks(command: str, config_path: Path | None = None) -> HookInstall:
+    """Write the hook block into Hermes' config, when the user explicitly asks.
+
+    ``hooks_config_block`` deliberately leaves the paste to the user, and the reason
+    still holds: editing another tool's configuration unasked is how an integration
+    becomes impossible to debug. But asking a newcomer to hand-merge YAML into a file
+    they have to go and find is the step that loses them, and the paste has its own
+    documented way of going wrong. So this performs the same edit *on request*, and pays
+    what consent costs:
+
+    - a config we cannot parse is refused, never overwritten — that file is somebody's
+      working setup and a parse error means we do not understand it;
+    - the previous contents are copied aside first;
+    - when Hermes has no ``hooks:`` section at all — the ordinary case — the block is
+      appended as text, so comments, ordering and formatting elsewhere survive
+      byte-for-byte. Round-tripping through the parser would silently reformat a file we
+      were only meant to add four lines to;
+    - only when a ``hooks:`` section already exists is the document rewritten, because
+      appending a second ``hooks:`` key would produce a config where one half silently
+      wins.
+
+    Raises ``ValueError`` if the existing config cannot be parsed.
+    """
+    if config_path is not None:
+        target = config_path
+    else:
+        existing = next((path for path in _config_candidates() if path.is_file()), None)
+        target = existing if existing is not None else _config_candidates()[0]
+
+    created = not target.exists()
+    if created:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("", encoding="utf-8")
+
+    text = target.read_text(encoding="utf-8")
+    try:
+        import yaml
+
+        parsed = yaml.safe_load(text) or {}
+    except Exception as error:
+        raise ValueError(f"Hermes config at {target} is not parseable: {error}") from error
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Hermes config at {target} is not a mapping; refusing to edit it.")
+
+    raw = parsed.get("hooks")
+    hooks: dict[str, Any] = raw if isinstance(raw, dict) else {}
+
+    def ours(event: str) -> bool:
+        return any(
+            "runopsy" in str(entry.get("command", ""))
+            for entry in hooks.get(event) or []
+            if isinstance(entry, dict)
+        )
+
+    already = tuple(event for event in RECORDED_EVENTS if ours(event))
+    missing = tuple(event for event in RECORDED_EVENTS if not ours(event))
+    if not missing:
+        return HookInstall(target, None, created, False, (), already)
+
+    backup = None if created else _backup_beside(target)
+
+    if not hooks:
+        # The ordinary case: no hooks section, so the block can simply be added and every
+        # other line in the file is left exactly as its owner wrote it.
+        prefix = "" if not text or text.endswith("\n") else "\n"
+        target.write_text(text + prefix + hooks_config_block(command), encoding="utf-8")
+        return HookInstall(target, backup, created, False, missing, already)
+
+    import yaml
+
+    for event in missing:
+        entries = hooks.setdefault(event, [])
+        if not isinstance(entries, list):
+            raise ValueError(f"hooks.{event} in {target} is not a list; refusing to edit it.")
+        entries.append({"command": f"{command} {event}", "timeout": 10})
+    parsed["hooks"] = hooks
+    target.write_text(yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return HookInstall(target, backup, created, True, missing, already)
+
+
+def enable_plugin(config_path: Path | None = None, name: str = "runopsy") -> bool:
+    """Name the Runopsy plugin in Hermes' ``plugins.enabled`` list.
+
+    Installing the plugin files is not enough — Hermes loads a user plugin only when its
+    config names it, so a half-done setup records tool calls and no model calls, which
+    looks exactly like a runtime that does not report them. Same rules as
+    ``install_hooks``: refuse a config we cannot parse, append as text when there is no
+    ``plugins:`` section so nothing else in the file moves, and only rewrite when a merge
+    is genuinely required.
+
+    Returns True if the file was changed.
+    """
+    if config_path is not None:
+        target = config_path
+    else:
+        existing = next((path for path in _config_candidates() if path.is_file()), None)
+        target = existing if existing is not None else _config_candidates()[0]
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    text = target.read_text(encoding="utf-8") if target.exists() else ""
+    try:
+        import yaml
+
+        parsed = yaml.safe_load(text) or {}
+    except Exception as error:
+        raise ValueError(f"Hermes config at {target} is not parseable: {error}") from error
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Hermes config at {target} is not a mapping; refusing to edit it.")
+
+    plugins = parsed.get("plugins")
+    enabled = plugins.get("enabled") if isinstance(plugins, dict) else None
+    if isinstance(enabled, list) and name in enabled:
+        return False
+
+    if plugins is None:
+        prefix = "" if not text or text.endswith("\n") else "\n"
+        target.write_text(f"{text}{prefix}plugins:\n  enabled:\n    - {name}\n", encoding="utf-8")
+        return True
+
+    import yaml
+
+    if not isinstance(plugins, dict):
+        raise ValueError(f"plugins in {target} is not a mapping; refusing to edit it.")
+    entries = plugins.setdefault("enabled", [])
+    if not isinstance(entries, list):
+        raise ValueError(f"plugins.enabled in {target} is not a list; refusing to edit it.")
+    entries.append(name)
+    parsed["plugins"] = plugins
+    target.write_text(yaml.safe_dump(parsed, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return True

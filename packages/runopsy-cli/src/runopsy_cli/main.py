@@ -487,16 +487,25 @@ def setup(
 def adapter(
     runtime: Annotated[str, typer.Argument(help="Runtime to configure. Only 'hermes' today.")],
     action: Annotated[
-        str, typer.Argument(help="'config' to print the hook block, or 'status' to check it.")
+        str,
+        typer.Argument(
+            help="'config' prints the hook block, 'install' writes it, 'status' checks it."
+        ),
     ] = "config",
     store: StoreOption = None,
 ) -> None:
-    """Show how to connect a runtime to Runopsy.
+    """Connect a runtime to Runopsy.
 
-    The configuration is printed for the user to paste rather than written into their
-    file. Editing another tool's config behind its owner's back is how integrations
-    become impossible to debug, and that file may hold settings we know nothing about.
+    config   prints the block to paste (default)
+    install  writes it for you, after saving what was there
+    status   checks whether the runtime is really wired
+    plugin   installs the plugin that captures model calls
     """
+    # 'config' stays the default deliberately. Editing another tool's configuration
+    # behind its owner's back is how integrations become impossible to debug, and that
+    # file may hold settings we know nothing about. 'install' does the same edit when
+    # somebody asks for it outright, and pays what consent costs: a backup, a refusal to
+    # touch a config it cannot parse, and a check afterwards that it actually worked.
     if runtime != "hermes":
         errors.print(f"No adapter for {runtime!r}. Supported: hermes.", style="red")
         raise typer.Exit(code=2)
@@ -521,12 +530,19 @@ def adapter(
             style="dim",
         )
         return
-    if action != "config":
-        errors.print(f"Unknown action {action!r}. Use 'config', 'status' or 'plugin'.", style="red")
+    if action not in {"config", "install"}:
+        errors.print(
+            f"Unknown action {action!r}. Use 'config', 'install', 'status' or 'plugin'.",
+            style="red",
+        )
         raise typer.Exit(code=2)
 
     target = Path(store).resolve() if store else None
     command = "runopsy hook" + (f" --store {target}" if target else "")
+
+    if action == "install":
+        _adapter_install(command)
+        return
 
     console.print("Add this to your Hermes cli-config.yaml:\n", style="bold")
     console.print(hermes.hooks_config_block(command))
@@ -544,6 +560,133 @@ def adapter(
         "shell dispatcher directly — so it is not evidence that the event arrives.",
         style="yellow",
     )
+
+
+@app.command()
+def init(
+    store: StoreOption = None,
+    runtime: Annotated[str, typer.Option("--runtime", help="Only 'hermes' today.")] = "hermes",
+) -> None:
+    """Wire everything up in one command.
+
+    Setting Runopsy up used to be four steps across two tools: install the agent, print a
+    YAML block, find the file it belongs in, paste it, then separately install and enable
+    a plugin. Every one of those is a place to stop, and the paste has a failure mode that
+    looks like success. This does the configuration end to end and then checks its own
+    work, because the whole point of the check is that a broken setup is invisible.
+    """
+    if runtime != "hermes":
+        errors.print(f"No adapter for {runtime!r}. Supported: hermes.", style="red")
+        raise typer.Exit(code=2)
+
+    target = Path(store).resolve() if store else None
+    command = "runopsy hook" + (f" --store {target}" if target else "")
+
+    executable = launcher.find_executable()
+    if executable is None:
+        errors.print(
+            "No 'hermes' executable on PATH.\n"
+            "  Install it together with Runopsy:  pip install runopsy[hermes]\n"
+            "  Or on its own:                     uv tool install hermes-agent\n"
+            "Then run 'runopsy init' again.",
+            style="red",
+        )
+        raise typer.Exit(code=2)
+    console.print(f"Found the agent at {executable}", style="dim")
+
+    try:
+        hooks = hermes.install_hooks(command)
+        enabled = hermes.enable_plugin(hooks.config_path)
+    except ValueError as error:
+        errors.print(
+            f"{error}\n"
+            "Refusing to edit a config that cannot be read. Run "
+            "'runopsy adapter hermes' and paste the block yourself.",
+            style="red",
+        )
+        raise typer.Exit(code=1) from None
+
+    console.print(
+        f"Hooks: {'added ' + str(len(hooks.added)) if hooks.added else 'already present'}"
+        f" in {hooks.config_path}"
+    )
+    if hooks.backup_path:
+        console.print(f"  Previous contents saved to {hooks.backup_path}", style="dim")
+
+    installed = hermes.install_plugin()
+    console.print(f"Plugin: installed at {installed}")
+    console.print(f"  {'enabled in the config' if enabled else 'already enabled'}", style="dim")
+
+    status = hermes.adapter_status()
+    if not status.is_wired:
+        errors.print(
+            "\nConfigured, but the check still does not see it wired.\n"
+            "Run 'runopsy adapter hermes status' for what is missing.",
+            style="red",
+        )
+        raise typer.Exit(code=1)
+
+    console.print("\nReady.", style="green")
+    console.print(
+        'Try:  runopsy run "fix the failing test"\n'
+        "Then: runopsy diagnose latest\n\n"
+        "The agent needs its own model key in its own config; Runopsy never sees it.\n"
+        "Runopsy itself needs no key — 'runopsy setup' only buys --mode hybrid.",
+        style="dim",
+    )
+
+
+def _adapter_install(command: str) -> None:
+    """Write the hook block into Hermes' config and prove it took.
+
+    Printing a block to paste is the safer default and stays the default. It is also the
+    step that loses a newcomer: they have to find a file, merge YAML by hand, and the one
+    plausible mistake — quoting the path instead of the whole invocation — makes Hermes
+    discard its entire config and record nothing while looking perfectly normal. So this
+    exists, and it checks its own work rather than reporting success for having written
+    bytes.
+    """
+    try:
+        result = hermes.install_hooks(command)
+    except ValueError as error:
+        errors.print(
+            f"{error}\n"
+            "Refusing to edit a config that cannot be read. Run "
+            "'runopsy adapter hermes' and paste the block yourself.",
+            style="red",
+        )
+        raise typer.Exit(code=1) from None
+
+    if not result.added:
+        console.print(f"Already wired in {result.config_path}. Nothing to do.")
+    else:
+        console.print(f"Wrote {len(result.added)} hook(s) into {result.config_path}.")
+        if result.created_config:
+            console.print("  Created the config file; Hermes had none here.", style="dim")
+        if result.backup_path:
+            console.print(f"  Previous contents saved to {result.backup_path}", style="dim")
+        if result.rewrote_file:
+            console.print(
+                "  The file had a hooks section already, so it was merged and rewritten.\n"
+                "  Comments and formatting elsewhere may have been normalised.",
+                style="yellow",
+            )
+
+    status = hermes.adapter_status()
+    if status.is_wired:
+        console.print("\nVerified: Hermes is wired to Runopsy.", style="green")
+        console.print(
+            "Start it with --accept-hooks, or approve the hooks once when prompted.\n"
+            "Then: runopsy runs",
+            style="dim",
+        )
+        return
+    errors.print(
+        "\nWrote the config, but the check still does not see it wired.\n"
+        "Run 'runopsy adapter hermes status' for what is missing.",
+        style="red",
+    )
+    raise typer.Exit(code=1)
 
 
 def _adapter_status(store: Path | None) -> None:
