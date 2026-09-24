@@ -27,7 +27,10 @@ from runopsy_core.schema import (
 )
 
 runner = CliRunner()
-NOW = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
+# Taken from the real clock, not fixed: the CLI tests below go through `prune`, which
+# reads the current time itself. A fixed date made "recent" age past the 7-day cutoff
+# a week after it was written, and the test started failing on its own.
+NOW = datetime.now(UTC).replace(microsecond=0)
 
 
 def run_events(run_id: str, *, started: datetime, command: str = "make") -> list[Event]:
